@@ -69,8 +69,11 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
 
                         .requestMatchers("/api/areas/**").hasRole("ADMINISTRADOR")
-                        .requestMatchers(HttpMethod.GET, "/api/evaluaciones/vacante/**")
-                        .hasAnyRole("ADMINISTRADOR", "POSTULANTE")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/evaluaciones/vacante/**"
+                        )
+                        .hasRole("POSTULANTE")
                         .requestMatchers("/api/evaluaciones/**").hasRole("ADMINISTRADOR")
                         .requestMatchers("/api/usuarios/**").hasRole("ADMINISTRADOR")
 

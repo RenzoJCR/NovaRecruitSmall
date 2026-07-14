@@ -51,7 +51,10 @@ export default function RendirExamen() {
       setPostulacionId(postulacionActiva.id);
 
       // 2. Descargar el examen técnico limpio configurado para esta vacante
-      const examenData = await evaluacionService.obtenerPorVacante(vacanteId);
+      const examenData =
+        await evaluacionService.obtenerPorVacantePostulante(
+          vacanteId
+        );
       if (!examenData || !examenData.preguntas || examenData.preguntas.length === 0) {
         setError('Esta vacante no cuenta con un banco de preguntas activo en este momento.');
         setLoading(false);

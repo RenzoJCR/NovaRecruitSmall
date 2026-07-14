@@ -203,7 +203,10 @@ function AdminVacantes() {
   // CARGAR EXAMEN EN MODO LECTURA (GET /api/evaluaciones/vacante/{id})
   const handleViewExam = async (vacanteId) => {
     try {
-      const examData = await evaluacionService.obtenerPorVacante(vacanteId);
+      const examData =
+        await evaluacionService.obtenerPorVacanteAdmin(
+          vacanteId
+        );
       const normalizedExam = Array.isArray(examData) ? examData[0] ?? null : examData;
       setViewingExam(normalizedExam);
     } catch (error) {
