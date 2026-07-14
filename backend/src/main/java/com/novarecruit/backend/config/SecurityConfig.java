@@ -65,7 +65,7 @@ public class SecurityConfig {
                                 // Autenticación pública.
                                 .requestMatchers("/api/auth/**")
                                 .permitAll()
-                                
+
                                 // Permite que Spring devuelva correctamente errores 400, 404, 409, etc.
                                 // No representa un endpoint funcional del sistema.
                                 .requestMatchers("/error")

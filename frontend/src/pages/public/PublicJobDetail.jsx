@@ -93,7 +93,9 @@ function PublicJobDetail() {
 
               <div className="flex items-center gap-3 bg-slate-900/50 border border-white/[0.03] p-3.5 rounded-xl text-sm">
                 <Calendar size={18} className="text-emerald-400" />
-                <span className="font-medium text-slate-400">Estado de plaza: <span className="text-emerald-400 font-bold">{vacante.estado}</span></span>
+                <span className="font-medium text-slate-400">{vacante.estado === "ACTIVA"
+                  ? "Publicada"
+                  : "Pausada"}<span className="text-emerald-400 font-bold">{vacante.estado}</span></span>
               </div>
             </div>
 
@@ -104,7 +106,7 @@ function PublicJobDetail() {
                 <div>
                   <h4 className="font-black text-sm">¿Deseas aplicar a esta vacante?</h4>
                   <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Para registrar tu postulación, adjuntar tu CV y habilitar tu evaluación en tiempo real, es obligatorio contar con un perfil.
+                    Para registrar tu postulación y acceder a la evaluación técnica, necesitas una cuenta de postulante.
                   </p>
                 </div>
               </div>

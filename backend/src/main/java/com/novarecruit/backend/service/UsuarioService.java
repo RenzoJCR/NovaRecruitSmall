@@ -53,7 +53,7 @@ public class UsuarioService {
         
         // Asignamos el Rol directo como String ("ADMINISTRADOR" o "POSTULANTE")
         usuario.setRol(request.rol().toUpperCase().trim());
-        usuario.setCvUrl(request.cvUrl() != null ? request.cvUrl().trim() : null);
+
         usuario.setActivo(true); // Por defecto, el usuario está activo
         usuario.setCreadoPor(correoOperador); // Guardamos la auditoría real
 
@@ -118,18 +118,23 @@ public class UsuarioService {
     }
 
     // Convertidor manual de Entidad a DTO Record
-    private UsuarioResponse mapToResponse(Usuario usuario) {
-        String nombreCompleto = usuario.getNombres() + " " + usuario.getApellidos();
+    private UsuarioResponse mapToResponse(
+            Usuario usuario) {
+
+        String nombreCompleto =
+                usuario.getNombres()
+                        + " "
+                        + usuario.getApellidos();
+
         return new UsuarioResponse(
-            usuario.getId(),
-            usuario.getNombres(),
-            usuario.getApellidos(),
-            nombreCompleto,
-            usuario.getCorreo(),
-            usuario.getRol(),
-            usuario.getCvUrl(),
-            usuario.isActivo(), // Si no agregas la columna, puedes hardcodear provisionalmente 'true'
-            usuario.getFechaCreacion()
+                usuario.getId(),
+                usuario.getNombres(),
+                usuario.getApellidos(),
+                nombreCompleto,
+                usuario.getCorreo(),
+                usuario.getRol(),
+                usuario.isActivo(),
+                usuario.getFechaCreacion()
         );
-        }
+    }
 }

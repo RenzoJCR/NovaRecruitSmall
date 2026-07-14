@@ -5,19 +5,32 @@ import com.novarecruit.backend.entity.Vacante;
 
 public class VacanteMapper {
 
-    public static VacanteResponse toResponse(Vacante vacante) {
-        if (vacante == null) return null;
+    private VacanteMapper() {
+    }
+
+    public static VacanteResponse toResponse(
+            Vacante vacante) {
+
+        if (vacante == null) {
+            return null;
+        }
+
+        Long evaluacionId =
+                vacante.getEvaluacion() != null
+                        ? vacante.getEvaluacion().getId()
+                        : null;
 
         return new VacanteResponse(
-            vacante.getId(),
-            vacante.getArea().getId(),       // Extraemos solo el ID relacional
-            vacante.getArea().getNombre(),   // Extraemos el nombre de la categoría
-            vacante.getTitulo(),
-            vacante.getDescripcion(),
-            vacante.getModalidad(),
-            vacante.getSalario(),
-            vacante.getEstado(),
-            vacante.getFechaCreacion()
+                vacante.getId(),
+                vacante.getArea().getId(),
+                vacante.getArea().getNombre(),
+                vacante.getTitulo(),
+                vacante.getDescripcion(),
+                vacante.getModalidad(),
+                vacante.getSalario(),
+                vacante.getEstado(),
+                evaluacionId,
+                vacante.getFechaCreacion()
         );
     }
 }

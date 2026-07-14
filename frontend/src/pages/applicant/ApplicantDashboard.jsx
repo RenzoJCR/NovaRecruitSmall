@@ -173,17 +173,39 @@ export default function ApplicantDashboard() {
 
                       {/* Acciones Condicionales */}
                       <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {!yaRindio && tieneEvaluacion ? (
+                        {postulacion.estado === "POSTULADO" &&
+                        tieneEvaluacion ? (
                           <button
-                            onClick={() => navigate(`/applicant/examen/${postulacion.vacanteId}`)}
-                            className="inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-colors shadow-sm"
+                            onClick={() =>
+                              navigate(
+                                `/applicant/examen/${postulacion.vacanteId}`
+                              )
+                            }
+                            className="inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-sm"
                           >
                             Rendir Examen
                           </button>
-                        ) : yaRindio && tieneEvaluacion ? (
-                          <span className="text-xs text-slate-500 font-medium">Completado</span>
+                        ) : postulacion.estado === "POSTULADO" &&
+                          !tieneEvaluacion ? (
+                          <span className="text-xs text-amber-600 font-medium">
+                            Esperando examen
+                          </span>
+                        ) : postulacion.estado === "EVALUADO" ? (
+                          <span className="text-xs text-purple-600 font-semibold">
+                            Evaluación completada
+                          </span>
+                        ) : postulacion.estado === "CONTRATADO" ? (
+                          <span className="text-xs text-emerald-600 font-semibold">
+                            Candidato contratado
+                          </span>
+                        ) : postulacion.estado === "RECHAZADO" ? (
+                          <span className="text-xs text-rose-600 font-semibold">
+                            Proceso finalizado
+                          </span>
                         ) : (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-slate-400">
+                            —
+                          </span>
                         )}
                       </td>
                     </tr>

@@ -112,7 +112,9 @@ export default function RendirExamen() {
       return;
     }
 
-    if (!window.confirm('¿Estás seguro de que deseas enviar tus respuestas? Una vez enviado, el sistema autocalificará tu nota sobre 20 en tiempo real de forma irreversible.')) {
+    if (!window.confirm(
+        "¿Deseas enviar la evaluación? Revisa tus respuestas: una vez enviada, no podrás modificarlas."
+      )) {
       return;
     }
 
@@ -133,7 +135,7 @@ export default function RendirExamen() {
       const mensaje =
         err.userMessage ||
         err.response?.data?.message ||
-        "No se pudo procesar la evaluación.";
+        "No se pudo enviar la evaluación. Revisa la conexión e inténtalo nuevamente.";
 
       alert(mensaje);
 
@@ -187,14 +189,59 @@ export default function RendirExamen() {
         </span>
         <h1 className="text-2xl font-extrabold tracking-tight">{evaluacion?.titulo}</h1>
         <p className="text-slate-400 text-sm">{evaluacion?.descripcion}</p>
-        <div className="pt-2 flex items-center gap-4 text-xs font-semibold text-slate-300 border-t border-slate-800">
+        <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-300 border-t border-slate-800">
           <span className="flex items-center gap-1.5">
-            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            Duración: {evaluacion?.duracionMinutos} minutos
+            <svg
+              className="w-4 h-4 text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+
+            Responde todas las preguntas antes de finalizar
           </span>
+
           <span className="flex items-center gap-1.5">
-            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            Puntaje Máximo: 20.00 Puntos Puros
+            <svg
+              className="w-4 h-4 text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 6v6l4 2"
+              />
+            </svg>
+
+            Envío único: las respuestas no podrán modificarse
+          </span>
+
+          <span className="flex items-center gap-1.5">
+            <svg
+              className="w-4 h-4 text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8c-2.2 0-4 1.3-4 3s1.8 3 4 3 4 1.3 4 3-1.8 3-4 3m0-12V5m0 15v-2"
+              />
+            </svg>
+
+            Puntaje máximo: 20 puntos
           </span>
         </div>
       </div>

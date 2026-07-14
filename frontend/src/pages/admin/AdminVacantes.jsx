@@ -65,6 +65,12 @@ function AdminVacantes() {
     setTimeout(() => setMessage(""), 4000);
   };
 
+  const getEstadoVacanteLabel = (estado) => {
+  return estado === "ACTIVA"
+    ? "Publicada"
+    : "Pausada";
+  };
+
   // FUNCIÓN RECEPTORA DE DATOS DE MYSQL
   const loadData = useCallback(async () => {
     try {
@@ -308,7 +314,7 @@ function AdminVacantes() {
                       <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full border ${
                         vacante.estado === "ACTIVA" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"
                       }`}>
-                        {vacante.estado}
+                        {getEstadoVacanteLabel(vacante.estado)}
                       </span>
                     </div>
                     <h3 className="text-xl font-black text-slate-900 mt-2 tracking-tight">{vacante.titulo}</h3>
@@ -321,25 +327,36 @@ function AdminVacantes() {
 
                   {/* SECCIÓN DE ACCIONES COMBINADAS (VACANTE + EXAMEN) */}
                   <div className="flex flex-wrap md:flex-col gap-2 justify-end">
-                    <button
-                      onClick={() => { setSelectedVacante(vacante); setShowExamModal(true); }}
-                      className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer"
-                    >
-                      <ClipboardCheck size={14} /> Configurar Examen
-                    </button>
-                    <button
-                      onClick={() => handleViewExam(vacante.id)}
-                      className="inline-flex items-center gap-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
-                    >
-                      <Eye size={14} /> Ver Preguntas
-                    </button>
+                    {vacante.evaluacionId ? (
+                      <button
+                        onClick={() => handleViewExam(vacante.id)}
+                        className="inline-flex items-center gap-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                      >
+                        <Eye size={14} />
+                        Ver Preguntas
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setSelectedVacante(vacante);
+                          setShowExamModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer"
+                      >
+                        <ClipboardCheck size={14} />
+                        Configurar Examen
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleToggleEstado(vacante.id, vacante.estado)}
                       className={`inline-flex items-center justify-center text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border ${
                         vacante.estado === "ACTIVA" ? "border-rose-200 text-rose-600 hover:bg-rose-50" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
                       }`}
                     >
-                      {vacante.estado === "ACTIVA" ? "Pausar Vacante" : "Activar Vacante"}
+                      {vacante.estado === "ACTIVA"
+                        ? "Pausar Publicación"
+                        : "Volver a Publicar"}
                     </button>
                   </div>
                 </div>

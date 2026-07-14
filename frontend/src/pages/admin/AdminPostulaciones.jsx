@@ -75,7 +75,10 @@ function AdminPostulaciones() {
     try {
       setUpdatingId(id);
       const updatedRecord = await postulacionService.actualizarEstado(id, faseDestino);
-      showMessage(`Candidato promovido exitosamente a la fase: ${faseDestino}`, "success");
+      showMessage(
+        `El proceso del candidato fue actualizado a: ${faseDestino}.`,
+        "success"
+      );
       
       // Actualizamos la lista local en memoria para evitar llamadas innecesarias al servidor
       setPostulaciones(prev => prev.map(p => p.id === id ? updatedRecord : p));
@@ -153,8 +156,13 @@ function AdminPostulaciones() {
                     
                     {/* Columna 1: Datos del Postulante */}
                     <div>
-                      <p className="font-black text-slate-900 tracking-tight">{p.usuarioNombre}</p>
-                      <span className="text-xs text-slate-500">{p.id} · ID Postulante: {p.usuarioId}</span>
+                      <p className="font-black text-slate-900 tracking-tight">
+                        {p.usuarioNombre}
+                      </p>
+
+                      <span className="text-xs text-slate-500">
+                        {p.usuarioCorreo}
+                      </span>
                     </div>
 
                     {/* Columna 2: Vacante */}
@@ -209,10 +217,43 @@ function AdminPostulaciones() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                 <div className="space-y-2">
-                  <p className="text-slate-400 font-bold text-xs uppercase tracking-wider">Detalles de la Aplicación</p>
-                  <p><strong>Puesto:</strong> {selectedPostulacion.vacanteTitulo}</p>
-                  <p><strong>Fecha Postulación:</strong> {new Date(selectedPostulacion.fechaPostulacion).toLocaleString()}</p>
-                  <p><strong>Historial Log Backend:</strong> <span className="text-sky-400 text-xs italic">{selectedPostulacion.comentariosInternos || "Sin registros de auditoría previos."}</span></p>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-wider">
+                    Datos del proceso
+                  </p>
+
+                  <p>
+                    <strong>Correo:</strong>{" "}
+                    {selectedPostulacion.usuarioCorreo}
+                  </p>
+
+                  <p>
+                    <strong>Puesto:</strong>{" "}
+                    {selectedPostulacion.vacanteTitulo}
+                  </p>
+
+                  <p>
+                    <strong>Área:</strong>{" "}
+                    {selectedPostulacion.vacanteAreaNombre}
+                  </p>
+
+                  <p>
+                    <strong>Estado:</strong>{" "}
+                    {selectedPostulacion.estado}
+                  </p>
+
+                  <p>
+                    <strong>Fecha de postulación:</strong>{" "}
+                    {new Date(
+                      selectedPostulacion.fechaPostulacion
+                    ).toLocaleString("es-PE")}
+                  </p>
+
+                  <p>
+                    <strong>Nota técnica:</strong>{" "}
+                    {selectedPostulacion.puntajeTecnico !== null
+                      ? `${selectedPostulacion.puntajeTecnico} / 20`
+                      : "Evaluación pendiente"}
+                  </p>
                 </div>
 
                 <div className="space-y-2 bg-slate-950 border border-white/5 p-4 rounded-2xl">
@@ -226,22 +267,59 @@ function AdminPostulaciones() {
               </div>
 
               {/* CONTROL DE CAMBIO DE ESTADOS (Mapea directo al PATCH del Service) */}
-              <div className="border-t border-slate-800 pt-4 flex flex-wrap gap-2 justify-end">
-                <span className="text-xs font-bold text-slate-400 flex items-center mr-auto">Cambiar Fase:</span>
-                <button
-                  onClick={() => handleUpdatePhase(selectedPostulacion.id, "RECHAZADO")}
-                  disabled={updatingId !== null}
-                  className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
-                >
-                  <XCircle size={14} /> Rechazar Candidato
-                </button>
-                <button
-                  onClick={() => handleUpdatePhase(selectedPostulacion.id, "CONTRATADO")}
-                  disabled={updatingId !== null}
-                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
-                >
-                  <CheckCircle size={14} /> Confirmar Contratación
-                </button>
+              <div className="border-t border-slate-800 pt-4">
+                {selectedPostulacion.estado === "EVALUADO" ? (
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <span className="text-xs font-bold text-slate-400 flex items-center mr-auto">
+                      Decisión final:
+                    </span>
+
+                    <button
+                      onClick={() =>
+                        handleUpdatePhase(
+                          selectedPostulacion.id,
+                          "RECHAZADO"
+                        )
+                      }
+                      disabled={updatingId !== null}
+                      className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <XCircle size={14} />
+                      Rechazar Candidato
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        handleUpdatePhase(
+                          selectedPostulacion.id,
+                          "CONTRATADO"
+                        )
+                      }
+                      disabled={updatingId !== null}
+                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <CheckCircle size={14} />
+                      Confirmar Contratación
+                    </button>
+                  </div>
+                ) : selectedPostulacion.estado === "POSTULADO" ? (
+                  <p className="text-sm text-amber-300 font-semibold">
+                    El candidato todavía debe completar la evaluación técnica.
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-300 font-semibold">
+                    Proceso finalizado con estado:{" "}
+                    <span
+                      className={
+                        selectedPostulacion.estado === "CONTRATADO"
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }
+                    >
+                      {selectedPostulacion.estado}
+                    </span>
+                  </p>
+                )}
               </div>
             </section>
           )}
