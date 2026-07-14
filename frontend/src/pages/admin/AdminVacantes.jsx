@@ -69,26 +69,47 @@ function AdminVacantes() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      // Ejecutamos ambas consultas en paralelo para mayor velocidad
-      const [vacantesData, areasData] = await Promise.all([
-        vacanteService.listarTodas(),
-        areaService.getAll()
-      ]);
-      setVacantes(vacantesData);
-      setAreas(areasData);
+
+      const [vacantesData, areasData] =
+        await Promise.all([
+          vacanteService.listarAdmin(),
+          areaService.getAll(),
+        ]);
+
+      setVacantes(
+        Array.isArray(vacantesData)
+          ? vacantesData
+          : []
+      );
+
+      setAreas(
+        Array.isArray(areasData)
+          ? areasData
+          : []
+      );
     } catch (error) {
-      showMessage(error.userMessage || "Error al sincronizar datos con el servidor.", "error");
+      console.error(
+        "Error al cargar la administración de vacantes:",
+        error
+      );
+
+      setVacantes([]);
+      setAreas([]);
+
+      setMessage(
+        error.userMessage ||
+          error.response?.data?.message ||
+          "No se pudieron sincronizar las vacantes y áreas con el servidor."
+      );
+
+      setMessageType("error");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData();
-    }, 0);
-
-    return () => clearTimeout(timer);
+    loadData();
   }, [loadData]);
 
   // MANEJO DE CAMBIOS EN FORMULARIO DE VACANTES
@@ -124,14 +145,41 @@ function AdminVacantes() {
   };
 
   // CAMBIO DE ESTADO DE LA VACANTE (PATCH /api/vacantes/{id}/estado)
-  const handleToggleEstado = async (id, estadoActual) => {
-    const nuevoEstado = estadoActual === "ACTIVA" ? "CERRADA" : "ACTIVA";
+  const handleToggleEstado = async (
+    vacanteId,
+    estadoActual
+  ) => {
+    const nuevoEstado =
+      estadoActual === "ACTIVA"
+        ? "CERRADA"
+        : "ACTIVA";
+
     try {
-      await vacanteService.cambiarEstado(id, nuevoEstado);
-      showMessage(`Vacante actualizada a estado ${nuevoEstado}.`, "success");
+      await vacanteService.cambiarEstado(
+        vacanteId,
+        nuevoEstado
+      );
+
+      showMessage(
+        nuevoEstado === "ACTIVA"
+          ? "La vacante fue activada correctamente."
+          : "La vacante fue pausada correctamente.",
+        "success"
+      );
+
       await loadData();
     } catch (error) {
-      showMessage(error.userMessage || "No se pudo cambiar el estado.", "error");
+      console.error(
+        "Error al cambiar el estado de la vacante:",
+        error
+      );
+
+      showMessage(
+        error.userMessage ||
+          error.response?.data?.message ||
+          "No se pudo cambiar el estado de la vacante.",
+        "error"
+      );
     }
   };
 

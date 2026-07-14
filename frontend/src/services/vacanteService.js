@@ -1,29 +1,44 @@
 import api from "./api";
 
 export const vacanteService = {
-  // Consume GET /api/vacantes (Público)
+  // Público y postulantes: solo vacantes activas.
   listarTodas: async () => {
     const response = await api.get("/vacantes");
-    return response.data; // Devuelve la lista de vacantes reales
+    return response.data;
   },
 
-  // Consume GET /api/vacantes/{id} (Público)
+  // Administrador: vacantes activas y cerradas.
+  listarAdmin: async () => {
+    const response = await api.get("/vacantes/admin");
+    return response.data;
+  },
+
+  // Público: detalle de una vacante activa.
   obtenerPorId: async (id) => {
     const response = await api.get(`/vacantes/${id}`);
-    return response.data; // Devuelve el detalle de una vacante específica
+    return response.data;
   },
 
-  // Consume POST /api/vacantes (ADMIN)
+  // Administrador: crear vacante.
   crear: async (payload) => {
     const response = await api.post("/vacantes", payload);
     return response.data;
   },
 
-  // Consume PATCH /api/vacantes/{id}/estado (ADMIN)
+  // Administrador: activar o cerrar vacante.
   cambiarEstado: async (id, nuevoEstado) => {
-    const response = await api.patch(`/vacantes/${id}/estado`, null, {
-      params: { nuevoEstado },
-    });
+    const response = await api.patch(
+      `/vacantes/${id}/estado`,
+      null,
+      {
+        params: {
+          nuevoEstado,
+        },
+      }
+    );
+
     return response.data;
-  }
+  },
 };
+
+export default vacanteService;

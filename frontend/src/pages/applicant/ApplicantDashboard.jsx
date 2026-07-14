@@ -114,8 +114,15 @@ export default function ApplicantDashboard() {
               </thead>
               <tbody className="bg-white divide-y divide-slate-200 text-sm text-slate-700">
                 {postulaciones.map((postulacion) => {
-                  const tieneEvaluacion = !!postulacion.vacanteEvaluacionId;
-                  const yaRindio = postulacion.estado !== 'POSTULADO';
+                  const tieneEvaluacion =
+                    Boolean(postulacion.vacanteEvaluacionId);
+
+                  const yaRindio =
+                    postulacion.fechaEvaluacion !== null ||
+                    postulacion.puntajeTecnico !== null ||
+                    postulacion.estado === "EVALUADO" ||
+                    postulacion.estado === "CONTRATADO" ||
+                    postulacion.estado === "RECHAZADO";
 
                   return (
                     <tr key={postulacion.id} className="hover:bg-slate-50/70 transition-colors">

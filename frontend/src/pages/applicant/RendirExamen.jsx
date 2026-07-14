@@ -42,8 +42,17 @@ export default function RendirExamen() {
         return;
       }
 
-      if (postulacionActiva.estado !== 'POSTULADO') {
-        setError(`Ya has rendido esta evaluación técnica previamente. Tu estado actual es: ${postulacionActiva.estado}`);
+      const evaluacionYaEnviada =
+        postulacionActiva.fechaEvaluacion !== null ||
+        postulacionActiva.puntajeTecnico !== null ||
+        postulacionActiva.estado === "EVALUADO" ||
+        postulacionActiva.estado === "CONTRATADO" ||
+        postulacionActiva.estado === "RECHAZADO";
+
+      if (evaluacionYaEnviada) {
+        setError(
+          "Esta evaluación ya fue enviada y no puede volver a modificarse."
+        );
         setLoading(false);
         return;
       }
@@ -119,8 +128,22 @@ export default function RendirExamen() {
       alert('¡Evaluación técnica enviada y procesada con éxito!');
       navigate('/applicant/dashboard'); // Redirigir de inmediato al panel histórico para ver la nota calculada
     } catch (err) {
-      console.error('Error al enviar el examen:', err);
-      alert('Error crítico al procesar la calificación. Inténtalo de nuevo.');
+      console.error("Error al enviar el examen:", err);
+
+      const mensaje =
+        err.userMessage ||
+        err.response?.data?.message ||
+        "No se pudo procesar la evaluación.";
+
+      alert(mensaje);
+
+      /*
+      * Si el backend informa que el examen ya fue enviado,
+      * regresamos al panel para evitar nuevos intentos.
+      */
+      if (err.response?.status === 409) {
+        navigate("/applicant/dashboard");
+      }
     } finally {
       setSubmitting(false);
     }

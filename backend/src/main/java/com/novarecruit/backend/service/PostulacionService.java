@@ -345,6 +345,10 @@ public class PostulacionService {
             EvaluarRequest request,
             String correoPostulante) {
 
+        /*
+         * La consulta valida propiedad y bloquea temporalmente
+         * la postulación durante la calificación.
+         */
         Postulacion postulacion = postulacionRepository
                 .findByIdAndUsuario_Correo(
                         postulacionId,
@@ -375,9 +379,45 @@ public class PostulacionService {
         );
 
         /*
-         * La evaluación se obtiene desde la vacante
-         * relacionada con la postulación validada.
+         * Una evaluación se considera enviada si existe cualquiera
+         * de estos indicadores.
+         *
+         * Esto también protege registros antiguos que pudieran
+         * tener uno de los campos incompletos.
          */
+        boolean yaFueEvaluada =
+                postulacion.getFechaEvaluacion() != null
+                        || postulacion.getPuntajeTecnico() != null
+                        || (
+                        postulacion.getRespuestasPostulante() != null
+                                && !postulacion
+                                .getRespuestasPostulante()
+                                .isBlank()
+                )
+                        || "EVALUADO".equalsIgnoreCase(
+                        postulacion.getEstado()
+                );
+
+        if (yaFueEvaluada) {
+
+            log.warn(
+                    "[SEGURIDAD] Segundo envío de evaluación rechazado. "
+                            + "correo={}, postulacionId={}, estado={}, "
+                            + "fechaEvaluacion={}, puntaje={}",
+                    correoPostulante,
+                    postulacionId,
+                    postulacion.getEstado(),
+                    postulacion.getFechaEvaluacion(),
+                    postulacion.getPuntajeTecnico()
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "La evaluación ya fue enviada "
+                            + "y no puede volver a modificarse"
+            );
+        }
+
         Evaluacion evaluacion =
                 postulacion.getVacante().getEvaluacion();
 
@@ -402,6 +442,16 @@ public class PostulacionService {
             );
         }
 
+        if (request == null
+                || request.respuestasPostulante() == null
+                || request.respuestasPostulante().isBlank()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debe enviar las respuestas de la evaluación"
+            );
+        }
+
         int puntajeTotal = 0;
 
         int puntajeBase =
@@ -417,6 +467,12 @@ public class PostulacionService {
                     objectMapper.readTree(
                             request.respuestasPostulante()
                     );
+
+            if (!respuestasJson.isObject()) {
+                throw new IllegalArgumentException(
+                        "Las respuestas deben tener formato de objeto JSON"
+                );
+            }
 
             log.info(
                     "[EVALUACION] Procesando respuestas. "
@@ -436,28 +492,39 @@ public class PostulacionService {
 
                 int puntajePregunta =
                         puntajeBase
-                                + (indice < puntosRestantes ? 1 : 0);
+                                + (
+                                indice < puntosRestantes
+                                        ? 1
+                                        : 0
+                        );
 
                 String idPregunta =
                         String.valueOf(pregunta.getId());
 
-                if (respuestasJson.has(idPregunta)) {
+                if (!respuestasJson.has(idPregunta)) {
+                    continue;
+                }
 
-                    String respuestaPostulante =
-                            respuestasJson
-                                    .get(idPregunta)
-                                    .asText();
+                String respuestaPostulante =
+                        respuestasJson
+                                .get(idPregunta)
+                                .asText()
+                                .trim();
 
-                    if (pregunta
-                            .getRespuestaCorrecta()
-                            .equalsIgnoreCase(
-                                    respuestaPostulante
-                            )) {
-
-                        puntajeTotal += puntajePregunta;
-                    }
+                if (
+                        pregunta.getRespuestaCorrecta() != null
+                                && pregunta
+                                .getRespuestaCorrecta()
+                                .equalsIgnoreCase(
+                                        respuestaPostulante
+                                )
+                ) {
+                    puntajeTotal += puntajePregunta;
                 }
             }
+
+        } catch (ResponseStatusException exception) {
+            throw exception;
 
         } catch (Exception exception) {
 
@@ -506,10 +573,14 @@ public class PostulacionService {
 
                         "mensaje",
                         "El candidato "
-                                + guardada.getUsuario().getNombres()
+                                + guardada
+                                .getUsuario()
+                                .getNombres()
                                 + " ha completado la evaluación técnica "
                                 + "de la vacante '"
-                                + guardada.getVacante().getTitulo()
+                                + guardada
+                                .getVacante()
+                                .getTitulo()
                                 + "' con un puntaje de: "
                                 + puntajeTotal
                 )
@@ -527,7 +598,9 @@ public class PostulacionService {
 
                         "mensaje",
                         "Tu evaluación técnica de la vacante '"
-                                + guardada.getVacante().getTitulo()
+                                + guardada
+                                .getVacante()
+                                .getTitulo()
                                 + "' fue calificada con: "
                                 + puntajeTotal
                                 + " / 20"

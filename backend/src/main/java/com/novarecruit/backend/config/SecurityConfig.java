@@ -60,27 +60,88 @@ public class SecurityConfig {
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.getWriter().write("{\"message\":\"No cuenta con permisos para realizar esta acción\"}");
                         }))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
+                        .authorizeHttpRequests(auth -> auth
 
-                        // El handshake SockJS es público. La autenticación real ocurre
-                        // dentro del frame STOMP CONNECT mediante WebSocketAuthChannelInterceptor.
-                        .requestMatchers("/ws/**").permitAll()
+                                // Autenticación pública.
+                                .requestMatchers("/api/auth/**")
+                                .permitAll()
+                                
+                                // Permite que Spring devuelva correctamente errores 400, 404, 409, etc.
+                                // No representa un endpoint funcional del sistema.
+                                .requestMatchers("/error")
+                                .permitAll()
 
-                        .requestMatchers("/api/areas/**").hasRole("ADMINISTRADOR")
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/evaluaciones/vacante/**"
+
+                                // Actuator temporalmente público.
+                                .requestMatchers("/actuator/**")
+                                .permitAll()
+
+                                // Handshake SockJS.
+                                .requestMatchers("/ws/**")
+                                .permitAll()
+
+                                // Áreas administrativas.
+                                .requestMatchers("/api/areas/**")
+                                .hasRole("ADMINISTRADOR")
+
+                                // Examen completo para administrador.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/evaluaciones/admin/vacante/**"
+                                )
+                                .hasRole("ADMINISTRADOR")
+
+                                // Examen seguro para postulante.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/evaluaciones/vacante/**"
+                                )
+                                .hasRole("POSTULANTE")
+
+                                // Gestión administrativa de evaluaciones.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/evaluaciones"
+                                )
+                                .hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/evaluaciones"
+                                )
+                                .hasRole("ADMINISTRADOR")
+
+                                .requestMatchers("/api/evaluaciones/**")
+                                .hasRole("ADMINISTRADOR")
+
+                                // Usuarios.
+                                .requestMatchers("/api/usuarios/**")
+                                .hasRole("ADMINISTRADOR")
+
+                                // Catálogo administrativo de vacantes.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/vacantes/admin",
+                                        "/api/vacantes/admin/**"
+                                )
+                                .hasRole("ADMINISTRADOR")
+
+                                // Catálogo público de vacantes activas.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/vacantes",
+                                        "/api/vacantes/*"
+                                )
+                                .permitAll()
+
+                                // Creación y modificación de vacantes.
+                                .requestMatchers("/api/vacantes/**")
+                                .hasRole("ADMINISTRADOR")
+
+                                // El resto requiere autenticación.
+                                .anyRequest()
+                                .authenticated()
                         )
-                        .hasRole("POSTULANTE")
-                        .requestMatchers("/api/evaluaciones/**").hasRole("ADMINISTRADOR")
-                        .requestMatchers("/api/usuarios/**").hasRole("ADMINISTRADOR")
-
-                        .requestMatchers(HttpMethod.GET, "/api/vacantes/**").permitAll()
-                        .requestMatchers("/api/vacantes/**").hasRole("ADMINISTRADOR")
-
-                        .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

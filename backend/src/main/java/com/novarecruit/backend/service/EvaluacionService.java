@@ -179,12 +179,22 @@ public class EvaluacionService {
     }
 
     private Evaluacion buscarPorVacante(Long vacanteId) {
-        return evaluacionRepository.findByVacanteId(vacanteId)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Esta vacante no cuenta con una "
-                                        + "evaluación configurada"
-                        )
-                );
+
+        return evaluacionRepository
+                .findByVacanteId(vacanteId)
+                .orElseThrow(() -> {
+
+                    log.info(
+                            "[EVALUACION] Vacante sin examen configurado. "
+                                    + "vacanteId={}",
+                            vacanteId
+                    );
+
+                    return new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Esta vacante aún no cuenta "
+                                    + "con una evaluación configurada"
+                    );
+                });
     }
 }
