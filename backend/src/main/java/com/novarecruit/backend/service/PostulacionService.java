@@ -8,9 +8,12 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,22 +28,29 @@ import com.novarecruit.backend.entity.Vacante;
 import com.novarecruit.backend.mapper.PostulacionMapper;
 import com.novarecruit.backend.repository.PostulacionRepository;
 import com.novarecruit.backend.repository.UsuarioRepository;
-import com.novarecruit.backend.repository.VacanteRepository; // WebSocket para notificaciones en tiempo real 
+import com.novarecruit.backend.repository.VacanteRepository;
 
 @Service
 public class PostulacionService {
 
-    private static final Logger log = LoggerFactory.getLogger(PostulacionService.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(PostulacionService.class);
+
     private static final int PUNTAJE_MAXIMO_EXAMEN = 20;
 
     private final PostulacionRepository postulacionRepository;
     private final VacanteRepository vacanteRepository;
     private final UsuarioRepository usuarioRepository;
-    private final ObjectMapper objectMapper; // Proveído nativamente por spring-boot-starter-web
-    private final SimpMessagingTemplate messagingTemplate; // Inyección de dependencia para WebSocket
+    private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public PostulacionService(PostulacionRepository postulacionRepository, VacanteRepository vacanteRepository, 
-                              UsuarioRepository usuarioRepository, ObjectMapper objectMapper, SimpMessagingTemplate messagingTemplate) {
+    public PostulacionService(
+            PostulacionRepository postulacionRepository,
+            VacanteRepository vacanteRepository,
+            UsuarioRepository usuarioRepository,
+            ObjectMapper objectMapper,
+            SimpMessagingTemplate messagingTemplate) {
+
         this.postulacionRepository = postulacionRepository;
         this.vacanteRepository = vacanteRepository;
         this.usuarioRepository = usuarioRepository;
@@ -48,164 +58,512 @@ public class PostulacionService {
         this.messagingTemplate = messagingTemplate;
     }
 
+    /*
+     * Método utilizado por PostulacionController.
+     *
+     * Recibe el DTO enviado desde React y el correo obtenido
+     * del usuario autenticado mediante JWT.
+     */
     @Transactional
-    public PostulacionResponse registrarPostulacion(PostulacionRequest request, String correoPostulante) {
-        Usuario usuario = usuarioRepository.findByCorreo(correoPostulante)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+    public PostulacionResponse registrarPostulacion(
+            PostulacionRequest request,
+            String correoPostulante) {
 
-        PostulacionResponse respuesta = registrarPostulacion(request.vacanteId(), usuario.getId());
+        Usuario usuario = usuarioRepository
+                .findByCorreo(correoPostulante)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "El usuario autenticado no fue encontrado"
+                ));
 
+        log.info(
+                "[POSTULACION] Solicitud recibida. "
+                        + "correo={}, usuarioId={}, vacanteId={}",
+                correoPostulante,
+                usuario.getId(),
+                request.vacanteId()
+        );
+
+        /*
+         * Se delega el registro al método que valida:
+         * - Que la vacante exista.
+         * - Que la vacante esté ACTIVA.
+         * - Que el postulante no haya postulado previamente.
+         */
+        PostulacionResponse response = registrarPostulacion(
+                request.vacanteId(),
+                usuario.getId()
+        );
+
+        /*
+         * La notificación se envía solamente después
+         * de guardar correctamente la postulación.
+         */
         String canalAdmin = "/topic/admin/notificaciones";
-        messagingTemplate.convertAndSend(canalAdmin, (Object) Map.of(
-                "tipo", "NUEVA_POSTULACION",
-                "mensaje", "El candidato " + usuario.getNombres()
-                        + " ha postulado a la vacante ID: " + request.vacanteId()
-        ));
 
-        log.info("[WS-SEND] Evento NUEVA_POSTULACION enviado: canal={}, postulacionId={}, userId={}, vacanteId={}",
-                canalAdmin, respuesta.id(), usuario.getId(), request.vacanteId());
+        messagingTemplate.convertAndSend(
+                canalAdmin,
+                (Object) Map.of(
+                        "tipo",
+                        "NUEVA_POSTULACION",
 
-        return respuesta;
+                        "mensaje",
+                        "El candidato "
+                                + usuario.getNombres()
+                                + " ha postulado a la vacante ID: "
+                                + request.vacanteId()
+                )
+        );
 
+        log.info(
+                "[WS-SEND] Evento NUEVA_POSTULACION enviado. "
+                        + "canal={}, postulacionId={}, "
+                        + "usuarioId={}, vacanteId={}",
+                canalAdmin,
+                response.id(),
+                usuario.getId(),
+                request.vacanteId()
+        );
+
+        return response;
     }
 
+    /*
+     * Método interno encargado de validar la vacante
+     * y guardar la postulación en MySQL.
+     */
     @Transactional
-    public PostulacionResponse registrarPostulacion(Long vacanteId, Long usuarioId) {
-        if (postulacionRepository.existsByUsuarioIdAndVacanteId(usuarioId, vacanteId)) {
-            throw new RuntimeException("Ya cuentas con una postulación en curso para esta vacante");
+    public PostulacionResponse registrarPostulacion(
+            Long vacanteId,
+            Long usuarioId) {
+
+        log.info(
+                "[POSTULACION] Validando vacante antes de registrar. "
+                        + "vacanteId={}, usuarioId={}",
+                vacanteId,
+                usuarioId
+        );
+
+        Vacante vacante = vacanteRepository
+                .findById(vacanteId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "La vacante solicitada no existe"
+                ));
+
+        String estadoVacante = vacante.getEstado() == null
+                ? ""
+                : vacante.getEstado().trim();
+
+        /*
+         * Esta validación se ejecuta en el backend.
+         * Aunque alguien modifique React o utilice Postman,
+         * no podrá postular a una vacante cerrada.
+         */
+        if (!"ACTIVA".equalsIgnoreCase(estadoVacante)) {
+
+            log.warn(
+                    "[SEGURIDAD] Intento de postular a vacante no activa. "
+                            + "usuarioId={}, vacanteId={}, estado={}",
+                    usuarioId,
+                    vacanteId,
+                    estadoVacante
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No se puede postular porque la vacante no está activa"
+            );
         }
 
-        Vacante vacante = vacanteRepository.findById(vacanteId).orElseThrow(() -> new RuntimeException("Vacante no encontrada"));
-        Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        if (postulacionRepository.existsByUsuarioIdAndVacanteId(
+                usuarioId,
+                vacanteId)) {
+
+            log.warn(
+                    "[POSTULACION] Postulación duplicada rechazada. "
+                            + "usuarioId={}, vacanteId={}",
+                    usuarioId,
+                    vacanteId
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Ya cuentas con una postulación para esta vacante"
+            );
+        }
+
+        Usuario usuario = usuarioRepository
+                .findById(usuarioId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "El usuario autenticado no fue encontrado"
+                ));
 
         Postulacion postulacion = new Postulacion();
         postulacion.setUsuario(usuario);
         postulacion.setVacante(vacante);
 
-        return PostulacionMapper.toResponse(postulacionRepository.save(postulacion));
-    }
+        Postulacion guardada =
+                postulacionRepository.save(postulacion);
 
-    @Transactional(readOnly = true)
-    public List<PostulacionResponse> listarPorPostulante(String correoPostulante) {
-        Usuario usuario = usuarioRepository.findByCorreo(correoPostulante)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        return postulacionRepository.findByUsuarioId(usuario.getId())
-                .stream()
-                .map(PostulacionMapper::toResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<PostulacionResponse> listarTodas() {
-        return postulacionRepository.findAll()
-                .stream()
-                .map(PostulacionMapper::toResponse)
-                .toList();
-    }
-
-    @Transactional
-    public PostulacionResponse actualizarEstado(Long postulacionId, String nuevoEstado, String correoOperador) {
-        Postulacion postulacion = postulacionRepository.findById(postulacionId)
-                .orElseThrow(() -> new RuntimeException("Postulación no encontrada"));
-
-        postulacion.setEstado(nuevoEstado.toUpperCase().trim());
-        postulacion.setComentariosInternos("Última actualización de estado por: " + correoOperador);
-
-        Postulacion guardada = postulacionRepository.save(postulacion);
-
-        String canalPostulante = "/topic/user/notificaciones/" + guardada.getUsuario().getId();
-        messagingTemplate.convertAndSend(canalPostulante, (Object) Map.of(
-                "tipo", "ACTUALIZACION_ESTADO",
-                "mensaje", "Tu postulación a la vacante '" + guardada.getVacante().getTitulo()
-                        + "' ha sido actualizada a: " + guardada.getEstado()
-        ));
-
-        log.info("[WS-SEND] Evento ACTUALIZACION_ESTADO enviado: canal={}, postulacionId={}, estado={}",
-                canalPostulante, guardada.getId(), guardada.getEstado());
+        log.info(
+                "[DB] Postulación guardada en MySQL. "
+                        + "postulacionId={}, usuarioId={}, "
+                        + "vacanteId={}, estado={}",
+                guardada.getId(),
+                usuarioId,
+                vacanteId,
+                guardada.getEstado()
+        );
 
         return PostulacionMapper.toResponse(guardada);
     }
 
-    @Transactional
-    public PostulacionResponse calificarEvaluacion(Long postulacionId, EvaluarRequest request) {
-        Postulacion postulacion = postulacionRepository.findById(postulacionId)
-                .orElseThrow(() -> new RuntimeException("Postulación no encontrada"));
+    /*
+     * Historial de postulaciones del usuario autenticado.
+     */
+    @Transactional(readOnly = true)
+    public List<PostulacionResponse> listarPorPostulante(
+            String correoPostulante) {
 
-        Evaluacion evaluacion = postulacion.getVacante().getEvaluacion();
+        Usuario usuario = usuarioRepository
+                .findByCorreo(correoPostulante)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Usuario no encontrado"
+                ));
+
+        log.info(
+                "[POSTULACION] Consultando historial. "
+                        + "correo={}, usuarioId={}",
+                correoPostulante,
+                usuario.getId()
+        );
+
+        return postulacionRepository
+                .findByUsuarioId(usuario.getId())
+                .stream()
+                .map(PostulacionMapper::toResponse)
+                .toList();
+    }
+
+    /*
+     * Listado administrativo de todas las postulaciones.
+     */
+    @Transactional(readOnly = true)
+    public List<PostulacionResponse> listarTodas() {
+
+        log.info(
+                "[POSTULACION] Consultando todas "
+                        + "las postulaciones del sistema"
+        );
+
+        return postulacionRepository
+                .findAll()
+                .stream()
+                .map(PostulacionMapper::toResponse)
+                .toList();
+    }
+
+    /*
+     * Cambio de estado realizado por un administrador.
+     */
+    @Transactional
+    public PostulacionResponse actualizarEstado(
+            Long postulacionId,
+            String nuevoEstado,
+            String correoOperador) {
+
+        Postulacion postulacion = postulacionRepository
+                .findById(postulacionId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Postulación no encontrada"
+                ));
+
+        String estadoAnterior = postulacion.getEstado();
+        String estadoNormalizado = nuevoEstado.toUpperCase().trim();
+
+        postulacion.setEstado(estadoNormalizado);
+        postulacion.setComentariosInternos(
+                "Última actualización de estado por: "
+                        + correoOperador
+        );
+
+        Postulacion guardada =
+                postulacionRepository.save(postulacion);
+
+        log.info(
+                "[DB] Estado de postulación actualizado en MySQL. "
+                        + "postulacionId={}, estadoAnterior={}, "
+                        + "estadoNuevo={}, operador={}",
+                guardada.getId(),
+                estadoAnterior,
+                guardada.getEstado(),
+                correoOperador
+        );
+
+        String canalPostulante =
+                "/topic/user/notificaciones/"
+                        + guardada.getUsuario().getId();
+
+        messagingTemplate.convertAndSend(
+                canalPostulante,
+                (Object) Map.of(
+                        "tipo",
+                        "ACTUALIZACION_ESTADO",
+
+                        "mensaje",
+                        "Tu postulación a la vacante '"
+                                + guardada.getVacante().getTitulo()
+                                + "' ha sido actualizada a: "
+                                + guardada.getEstado()
+                )
+        );
+
+        log.info(
+                "[WS-SEND] Evento ACTUALIZACION_ESTADO enviado. "
+                        + "canal={}, postulacionId={}, estado={}",
+                canalPostulante,
+                guardada.getId(),
+                guardada.getEstado()
+        );
+
+        return PostulacionMapper.toResponse(guardada);
+    }
+
+    /*
+     * Calificación automática del examen.
+     *
+     * La consulta exige que el ID de la postulación
+     * pertenezca al correo autenticado.
+     */
+    @Transactional
+    public PostulacionResponse calificarEvaluacion(
+            Long postulacionId,
+            EvaluarRequest request,
+            String correoPostulante) {
+
+        Postulacion postulacion = postulacionRepository
+                .findByIdAndUsuario_Correo(
+                        postulacionId,
+                        correoPostulante
+                )
+                .orElseThrow(() -> {
+
+                    log.warn(
+                            "[SEGURIDAD] Intento de evaluar una "
+                                    + "postulación ajena o inexistente. "
+                                    + "correo={}, postulacionId={}",
+                            correoPostulante,
+                            postulacionId
+                    );
+
+                    return new AccessDeniedException(
+                            "La postulación no pertenece "
+                                    + "al usuario autenticado"
+                    );
+                });
+
+        log.info(
+                "[EVALUACION] Propiedad de postulación validada. "
+                        + "correo={}, postulacionId={}, vacanteId={}",
+                correoPostulante,
+                postulacion.getId(),
+                postulacion.getVacante().getId()
+        );
+
+        /*
+         * La evaluación se obtiene desde la vacante
+         * relacionada con la postulación validada.
+         */
+        Evaluacion evaluacion =
+                postulacion.getVacante().getEvaluacion();
+
         if (evaluacion == null) {
-            throw new RuntimeException("La vacante no posee un examen configurado");
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "La vacante no posee un examen configurado"
+            );
         }
 
-        List<Pregunta> preguntasOrdenadas = new ArrayList<>(evaluacion.getPreguntas());
-        preguntasOrdenadas.sort(Comparator.comparing(Pregunta::getId));
+        List<Pregunta> preguntasOrdenadas =
+                new ArrayList<>(evaluacion.getPreguntas());
+
+        preguntasOrdenadas.sort(
+                Comparator.comparing(Pregunta::getId)
+        );
 
         if (preguntasOrdenadas.isEmpty()) {
-            throw new RuntimeException("La vacante no posee preguntas configuradas");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "La evaluación no posee preguntas configuradas"
+            );
         }
 
         int puntajeTotal = 0;
-        int puntajeBase = PUNTAJE_MAXIMO_EXAMEN / preguntasOrdenadas.size();
-        int puntosRestantes = PUNTAJE_MAXIMO_EXAMEN % preguntasOrdenadas.size();
+
+        int puntajeBase =
+                PUNTAJE_MAXIMO_EXAMEN
+                        / preguntasOrdenadas.size();
+
+        int puntosRestantes =
+                PUNTAJE_MAXIMO_EXAMEN
+                        % preguntasOrdenadas.size();
 
         try {
-            // Parsea el JSON String plano enviado por React (ej: {"1":"A","2":"C"})
-            JsonNode respuestasJson = objectMapper.readTree(request.respuestasPostulante());
-            
-            // Evaluamos cada pregunta oficial contra el mapa del alumno
-            for (int indice = 0; indice < preguntasOrdenadas.size(); indice++) {
-                Pregunta pregunta = preguntasOrdenadas.get(indice);
-                int puntajePregunta = puntajeBase + (indice < puntosRestantes ? 1 : 0);
-                String idPreguntaStr = String.valueOf(pregunta.getId());
-                if (respuestasJson.has(idPreguntaStr)) {
-                    String respuestaAlumno = respuestasJson.get(idPreguntaStr).asText();
-                    if (pregunta.getRespuestaCorrecta().equalsIgnoreCase(respuestaAlumno)) {
-                        puntajeTotal += puntajePregunta; // Reparto automático sobre 20 puntos exactos
+            JsonNode respuestasJson =
+                    objectMapper.readTree(
+                            request.respuestasPostulante()
+                    );
+
+            log.info(
+                    "[EVALUACION] Procesando respuestas. "
+                            + "postulacionId={}, evaluacionId={}, "
+                            + "preguntas={}",
+                    postulacionId,
+                    evaluacion.getId(),
+                    preguntasOrdenadas.size()
+            );
+
+            for (int indice = 0;
+                 indice < preguntasOrdenadas.size();
+                 indice++) {
+
+                Pregunta pregunta =
+                        preguntasOrdenadas.get(indice);
+
+                int puntajePregunta =
+                        puntajeBase
+                                + (indice < puntosRestantes ? 1 : 0);
+
+                String idPregunta =
+                        String.valueOf(pregunta.getId());
+
+                if (respuestasJson.has(idPregunta)) {
+
+                    String respuestaPostulante =
+                            respuestasJson
+                                    .get(idPregunta)
+                                    .asText();
+
+                    if (pregunta
+                            .getRespuestaCorrecta()
+                            .equalsIgnoreCase(
+                                    respuestaPostulante
+                            )) {
+
+                        puntajeTotal += puntajePregunta;
                     }
                 }
             }
-        } catch (Exception e) {
-            throw new RuntimeException("Error al procesar la sintaxis del examen técnico");
+
+        } catch (Exception exception) {
+
+            log.warn(
+                    "[EVALUACION] Formato inválido de respuestas. "
+                            + "correo={}, postulacionId={}, error={}",
+                    correoPostulante,
+                    postulacionId,
+                    exception.getMessage()
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El formato de las respuestas "
+                            + "del examen no es válido"
+            );
         }
 
-        // Actualizamos el estado transaccional y fijamos ejes de métricas temporales
-        postulacion.setRespuestasPostulante(request.respuestasPostulante());
+        postulacion.setRespuestasPostulante(
+                request.respuestasPostulante()
+        );
+
         postulacion.setPuntajeTecnico(puntajeTotal);
         postulacion.setEstado("EVALUADO");
         postulacion.setFechaEvaluacion(LocalDateTime.now());
 
-        Postulacion guardada = postulacionRepository.save(postulacion);
+        Postulacion guardada =
+                postulacionRepository.save(postulacion);
 
-        String canalAdmin = "/topic/admin/notificaciones";
-        messagingTemplate.convertAndSend(canalAdmin, (Object) Map.of(
-                "tipo", "EVALUACION_CALIFICADA",
-                "mensaje", "El candidato " + guardada.getUsuario().getNombres()
-                        + " ha completado la evaluación técnica de la vacante '"
-                        + guardada.getVacante().getTitulo() + "' con un puntaje de: " + puntajeTotal
-        ));
+        log.info(
+                "[DB] Resultado de evaluación guardado en MySQL. "
+                        + "postulacionId={}, usuarioId={}, puntaje={}/20",
+                guardada.getId(),
+                guardada.getUsuario().getId(),
+                puntajeTotal
+        );
 
-        String canalPostulante = "/topic/user/notificaciones/" + guardada.getUsuario().getId();
-        messagingTemplate.convertAndSend(canalPostulante, (Object) Map.of(
-                "tipo", "EVALUACION_CALIFICADA",
-                "mensaje", "Tu evaluación técnica de la vacante '"
-                        + guardada.getVacante().getTitulo() + "' fue calificada con: "
-                        + puntajeTotal + " / 20"
-        ));
+        String canalAdmin =
+                "/topic/admin/notificaciones";
 
-        log.info("[WS-SEND] Evento EVALUACION_CALIFICADA enviado: postulacionId={}, puntaje={}, canales=[{}, {}]",
-                guardada.getId(), puntajeTotal, canalAdmin, canalPostulante);
+        messagingTemplate.convertAndSend(
+                canalAdmin,
+                (Object) Map.of(
+                        "tipo",
+                        "EVALUACION_CALIFICADA",
+
+                        "mensaje",
+                        "El candidato "
+                                + guardada.getUsuario().getNombres()
+                                + " ha completado la evaluación técnica "
+                                + "de la vacante '"
+                                + guardada.getVacante().getTitulo()
+                                + "' con un puntaje de: "
+                                + puntajeTotal
+                )
+        );
+
+        String canalPostulante =
+                "/topic/user/notificaciones/"
+                        + guardada.getUsuario().getId();
+
+        messagingTemplate.convertAndSend(
+                canalPostulante,
+                (Object) Map.of(
+                        "tipo",
+                        "EVALUACION_CALIFICADA",
+
+                        "mensaje",
+                        "Tu evaluación técnica de la vacante '"
+                                + guardada.getVacante().getTitulo()
+                                + "' fue calificada con: "
+                                + puntajeTotal
+                                + " / 20"
+                )
+        );
+
+        log.info(
+                "[WS-SEND] Evento EVALUACION_CALIFICADA enviado. "
+                        + "postulacionId={}, puntaje={}, "
+                        + "canales=[{}, {}]",
+                guardada.getId(),
+                puntajeTotal,
+                canalAdmin,
+                canalPostulante
+        );
 
         return PostulacionMapper.toResponse(guardada);
     }
 
-    // ACCESOS EXPUESTOS PARA LAS GRÁFICAS DE SERIES DE TIEMPO
+    /*
+     * Datos utilizados por las gráficas actuales.
+     * Más adelante se reemplazarán por consultas mensuales.
+     */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> obtenerDatosMétricaAtracción() {
-        return postulacionRepository.obtenerMetricaAtraccionTiempo();
+    public List<Map<String, Object>>
+    obtenerDatosMétricaAtracción() {
+
+        return postulacionRepository
+                .obtenerMetricaAtraccionTiempo();
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> obtenerDatosMétricaRendimiento() {
-        return postulacionRepository.obtenerMetricaRendimientoTiempo();
+    public List<Map<String, Object>>
+    obtenerDatosMétricaRendimiento() {
+
+        return postulacionRepository
+                .obtenerMetricaRendimientoTiempo();
     }
 }

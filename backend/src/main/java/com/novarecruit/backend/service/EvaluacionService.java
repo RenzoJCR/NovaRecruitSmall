@@ -17,6 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import com.novarecruit.backend.entity.Postulacion;
+import com.novarecruit.backend.repository.PostulacionRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
+
 @Service
 public class EvaluacionService {
 
@@ -25,13 +31,16 @@ public class EvaluacionService {
 
     private final EvaluacionRepository evaluacionRepository;
     private final VacanteRepository vacanteRepository;
+    private final PostulacionRepository postulacionRepository;
 
     public EvaluacionService(
             EvaluacionRepository evaluacionRepository,
-            VacanteRepository vacanteRepository) {
+            VacanteRepository vacanteRepository,
+            PostulacionRepository postulacionRepository) {
 
         this.evaluacionRepository = evaluacionRepository;
         this.vacanteRepository = vacanteRepository;
+        this.postulacionRepository = postulacionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -64,10 +73,50 @@ public class EvaluacionService {
      * Devuelve el examen sin respuestas correctas al postulante.
      */
     @Transactional(readOnly = true)
-    public EvaluacionPostulanteResponse listarPorVacantePostulante(
-            Long vacanteId) {
+    public EvaluacionPostulanteResponse
+    listarPorVacantePostulante(
+            Long vacanteId,
+            String correoPostulante) {
 
-        Evaluacion evaluacion = buscarPorVacante(vacanteId);
+        /*
+         * La consulta comprueba que existe una postulación
+         * que relaciona al correo autenticado con la vacante.
+         */
+        Postulacion postulacion =
+                postulacionRepository
+                        .findByUsuario_CorreoAndVacante_Id(
+                                correoPostulante,
+                                vacanteId
+                        )
+                        .orElseThrow(() -> {
+
+                            log.warn(
+                                    "[SEGURIDAD] Intento de acceder a examen "
+                                            + "sin postulación propia. "
+                                            + "correo={}, vacanteId={}",
+                                    correoPostulante,
+                                    vacanteId
+                            );
+
+                            return new AccessDeniedException(
+                                    "No puedes acceder al examen "
+                                            + "de esta vacante"
+                            );
+                        });
+
+        /*
+         * El examen se obtiene desde la vacante
+         * vinculada a la postulación validada.
+         */
+        Evaluacion evaluacion =
+                postulacion.getVacante().getEvaluacion();
+
+        if (evaluacion == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Esta vacante no cuenta con una evaluación configurada"
+            );
+        }
 
         int cantidadPreguntas =
                 evaluacion.getPreguntas() == null
@@ -75,15 +124,19 @@ public class EvaluacionService {
                         : evaluacion.getPreguntas().size();
 
         log.info(
-                "[EVALUACION] Entregando examen seguro al postulante "
-                        + "sin respuestas correctas. "
-                        + "vacanteId={}, evaluacionId={}, preguntas={}",
+                "[EVALUACION] Entregando examen seguro. "
+                        + "correo={}, postulacionId={}, vacanteId={}, "
+                        + "evaluacionId={}, preguntas={}",
+                correoPostulante,
+                postulacion.getId(),
                 vacanteId,
                 evaluacion.getId(),
                 cantidadPreguntas
         );
 
-        return EvaluacionMapper.toPostulanteResponse(evaluacion);
+        return EvaluacionMapper.toPostulanteResponse(
+                evaluacion
+        );
     }
 
     @Transactional

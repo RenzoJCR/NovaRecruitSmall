@@ -76,17 +76,37 @@ public class PostulacionController {
         return ResponseEntity.ok(response);
     }
 
-    // 5. PRIVADO (POSTULANTE): Enviar y autocalificar el examen técnico en tiempo real
+    // PRIVADO (POSTULANTE):
+    // Envía y autocalifica únicamente su propia evaluación.
     @PreAuthorize("hasRole('POSTULANTE')")
     @PostMapping("/{id}/evaluar")
     public ResponseEntity<PostulacionResponse> calificarExamen(
             @PathVariable Long id,
-            @RequestBody com.novarecruit.backend.dto.EvaluarRequest request) {
-        log.info("Postulante envía respuestas para evaluación en postulación ID: {}", id);
-        
-        PostulacionResponse response = postulacionService.calificarEvaluacion(id, request);
-        
-        log.info("Evaluación procesada en MySQL. Nota final calculada: {}/20. Estado actualizado a: EVALUADO", response.puntajeTecnico());
+            @RequestBody com.novarecruit.backend.dto.EvaluarRequest request,
+            @AuthenticationPrincipal String correoPostulante) {
+
+        log.info(
+                "[EVALUACION] Postulante envía respuestas. "
+                        + "correo={}, postulacionId={}",
+                correoPostulante,
+                id
+        );
+
+        PostulacionResponse response =
+                postulacionService.calificarEvaluacion(
+                        id,
+                        request,
+                        correoPostulante
+                );
+
+        log.info(
+                "[EVALUACION] Evaluación procesada en MySQL. "
+                        + "postulacionId={}, nota={}/20, estado={}",
+                response.id(),
+                response.puntajeTecnico(),
+                response.estado()
+        );
+
         return ResponseEntity.ok(response);
     }
 

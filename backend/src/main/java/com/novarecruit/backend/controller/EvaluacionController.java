@@ -63,7 +63,10 @@ public class EvaluacionController {
 
         return ResponseEntity.ok(
                 evaluacionService
-                        .listarPorVacantePostulante(vacanteId)
+                        .listarPorVacantePostulante(
+                                vacanteId,
+                                correoPostulante
+                        )
         );
     }
 

@@ -8,6 +8,7 @@ import com.novarecruit.backend.entity.Postulacion;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Repository
 public interface PostulacionRepository extends JpaRepository<Postulacion, Long> {
@@ -19,6 +20,18 @@ public interface PostulacionRepository extends JpaRepository<Postulacion, Long> 
 
     // Seguridad: Valida si un usuario ya postuló a esa vacante concreta (Evita doble postulación)
     boolean existsByUsuarioIdAndVacanteId(Long usuarioId, Long vacanteId);
+
+    // Seguridad: busca una postulación únicamente si pertenece al correo autenticado.
+    Optional<Postulacion> findByIdAndUsuario_Correo(
+            Long postulacionId,
+            String correo
+    );
+
+    // Seguridad: verifica que el usuario autenticado haya postulado a la vacante.
+    Optional<Postulacion> findByUsuario_CorreoAndVacante_Id(
+            String correo,
+            Long vacanteId
+    );
 
     // MÉTRICA 1: Volumen de Atracción (Conteo de postulaciones agrupadas por día/fecha)
     @Query(value = "SELECT DATE(fecha_postulacion) as fecha, COUNT(*) as cantidad " +
