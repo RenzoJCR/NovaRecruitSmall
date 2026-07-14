@@ -1,95 +1,133 @@
-import { createContext, useContext, useState, useEffect } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/authService";
 
 const AuthContext = createContext(null);
 
+const TOKEN_KEY = "novarecruit_token";
+const USER_KEY = "novarecruit_user";
+
+function cargarUsuarioGuardado() {
+  const storedUser = localStorage.getItem(USER_KEY);
+  if (!storedUser) {
+    return null;
+  }
+
+  try {
+    const parsedUser = JSON.parse(storedUser);
+    const id = parsedUser.id ?? parsedUser.userId;
+
+    if (!id || !parsedUser.rol) {
+      localStorage.removeItem(USER_KEY);
+      return null;
+    }
+
+    return { ...parsedUser, id };
+  } catch {
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
+}
+
+function construirUsuario(data) {
+  return {
+    id: data.userId,
+    nombres: data.nombres,
+    apellidos: data.apellidos,
+    correo: data.correo,
+    rol: data.rol,
+  };
+}
+
 export function AuthProvider({ children }) {
-  // Inicializamos los estados leyendo el disco del navegador (localStorage)
-  const [token, setToken] = useState(() => localStorage.getItem("novarecruit_token"));
-  const [user, setUser] = useState(() => {
-    const storedUser = localStorage.getItem("novarecruit_user");
-    return storedUser ? JSON.parse(storedUser) : null;
-  });
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
+  const [user, setUser] = useState(cargarUsuarioGuardado);
   const [loading, setLoading] = useState(false);
 
-  // Cada vez que el token cambie, lo actualizamos en el almacenamiento local
   useEffect(() => {
     if (token) {
-      localStorage.setItem("novarecruit_token", token);
+      localStorage.setItem(TOKEN_KEY, token);
     } else {
-      localStorage.removeItem("novarecruit_token");
+      localStorage.removeItem(TOKEN_KEY);
     }
   }, [token]);
 
-  // Cada vez que el usuario cambie, actualizamos sus datos en formato texto string JSON
   useEffect(() => {
     if (user) {
-      localStorage.setItem("novarecruit_user", JSON.stringify(user));
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem("novarecruit_user");
+      localStorage.removeItem(USER_KEY);
     }
   }, [user]);
 
-  // Función lógica de Login que llamará el formulario de la pantalla
+  useEffect(() => {
+    const cerrarSesionPorTokenInvalido = () => {
+      setToken(null);
+      setUser(null);
+    };
+
+    window.addEventListener(
+      "novarecruit:unauthorized",
+      cerrarSesionPorTokenInvalido,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "novarecruit:unauthorized",
+        cerrarSesionPorTokenInvalido,
+      );
+    };
+  }, []);
+
   const loginExecute = async (correo, password) => {
     setLoading(true);
     try {
       const data = await authService.login(correo, password);
-      // Al recibir el DTO ideal de Java, guardamos el token y los datos del perfil
       setToken(data.token);
-      setUser({
-        id: data.id,
-        nombres: data.nombres,
-        correo: data.correo,
-        rol: data.rol // 'ADMINISTRADOR' o 'POSTULANTE'
-      });
+      setUser(construirUsuario(data));
       return data;
     } finally {
       setLoading(false);
     }
   };
 
-  // Función lógica para registrarse
   const registerExecute = async (nombres, apellidos, correo, password) => {
     setLoading(true);
     try {
-      const data = await authService.register(nombres, apellidos, correo, password);
+      const data = await authService.register(
+        nombres,
+        apellidos,
+        correo,
+        password,
+      );
       setToken(data.token);
-      setUser({
-        id: data.id,
-        nombres: data.nombres,
-        correo: data.correo,
-        rol: data.rol
-      });
+      setUser(construirUsuario(data));
       return data;
     } finally {
       setLoading(false);
     }
   };
 
-  // Cierre de sesión asíncrono (Stateless puro)
   const logoutExecute = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem("novarecruit_token");
-    localStorage.removeItem("novarecruit_user");
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
   };
 
-  // Exponemos las variables y funciones para que cualquier componente las consuma
   const value = {
     token,
     user,
     loading,
-    isAuthenticated: Boolean(token && user),
+    isAuthenticated: Boolean(token && user?.id && user?.rol),
     login: loginExecute,
     register: registerExecute,
-    logout: logoutExecute
+    logout: logoutExecute,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Gancho (Hook) utilitario para usar el contexto con una sola línea de código
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

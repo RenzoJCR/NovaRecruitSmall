@@ -2,10 +2,11 @@ package com.novarecruit.backend.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
@@ -14,49 +15,61 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    // Llave secreta segura de 256 bits para firmar los tokens criptográficamente
-    private final Key SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-    
-    // El token expirará en 24 horas
-    private final long EXPIRATION_TIME = 86400000; 
+    private final Key secretKey;
+    private final long expirationTime;
 
-    // Genera el pasaporte digital con el correo y el rol del usuario
-    public String generarToken(String correo, String rol) {
+    public JwtUtil(
+            @Value("${security.jwt.secret}") String secret,
+            @Value("${security.jwt.expiration-ms:86400000}") long expirationTime) {
+
+        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalArgumentException(
+                    "JWT_SECRET debe contener al menos 32 caracteres para utilizar HS256 de forma segura");
+        }
+
+        this.secretKey = Keys.hmacShaKeyFor(secretBytes);
+        this.expirationTime = expirationTime;
+    }
+
+    public String generarToken(Long userId, String correo, String rol) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("rol", rol); // Guardamos el rol dentro del Payload del token
+        claims.put("userId", userId);
+        claims.put("rol", rol);
+
+        long ahora = System.currentTimeMillis();
 
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(correo)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(SECRET_KEY)
+                .setIssuedAt(new Date(ahora))
+                .setExpiration(new Date(ahora + expirationTime))
+                .signWith(secretKey)
                 .compact();
     }
 
-    // Abre el token y extrae el correo electrónico (Subject)
     public String extraerCorreo(String token) {
         return extraerTodosLosClaims(token).getSubject();
     }
 
-    // Extrae el rol guardado en el token
     public String extraerRol(String token) {
         return extraerTodosLosClaims(token).get("rol", String.class);
     }
 
-    // Valida si el token ha expirado
-    public boolean esTokenValido(String token, String correoUsuario) {
-        String correoToken = extraerCorreo(token);
-        return (correoToken.equals(correoUsuario) && !estaExpirado(token));
+    public Long extraerUserId(String token) {
+        Number userId = extraerTodosLosClaims(token).get("userId", Number.class);
+        return userId == null ? null : userId.longValue();
     }
 
-    private boolean estaExpirado(String token) {
-        return extraerTodosLosClaims(token).getExpiration().before(new Date());
+    public boolean esTokenValido(String token, String correoUsuario) {
+        Claims claims = extraerTodosLosClaims(token);
+        return correoUsuario.equalsIgnoreCase(claims.getSubject())
+                && claims.getExpiration().after(new Date());
     }
 
     private Claims extraerTodosLosClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(SECRET_KEY)
+                .setSigningKey(secretKey)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();

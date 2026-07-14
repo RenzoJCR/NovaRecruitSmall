@@ -7,37 +7,43 @@ import { crearConexionWebSocket } from "../services/websocketService";
 const RealtimeNotificationsContext = createContext(null);
 
 function RealtimeNotificationsProvider({ children }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [ultimoEvento, setUltimoEvento] = useState(null);
   const [toast, setToast] = useState(null);
   const [estadoConexion, setEstadoConexion] = useState("desconectado");
 
   useEffect(() => {
-    if (!user?.id || !user?.rol) {
+    if (!token || !user?.id || !user?.rol) {
       return undefined;
     }
 
-    const canal = user.rol === "ADMINISTRADOR"
-      ? "/topic/admin/notificaciones"
-      : `/topic/user/notificaciones/${user.id}`;
+    const canal =
+      user.rol === "ADMINISTRADOR"
+        ? "/topic/admin/notificaciones"
+        : `/topic/user/notificaciones/${user.id}`;
 
-    const desuscribir = crearConexionWebSocket((evento) => {
-      const payload = evento || {};
+    const desconectar = crearConexionWebSocket(
+      (evento) => {
+        const payload = evento || {};
 
-      setUltimoEvento({
-        ...payload,
-        recibidoEn: Date.now(),
-        canal,
-      });
+        setUltimoEvento({
+          ...payload,
+          recibidoEn: Date.now(),
+          canal,
+        });
 
-      setToast({
-        tipo: payload.tipo || "EVENTO",
-        mensaje: payload.mensaje || "Nueva notificación en tiempo real.",
-      });
-    }, canal, setEstadoConexion);
+        setToast({
+          tipo: payload.tipo || "EVENTO",
+          mensaje: payload.mensaje || "Nueva notificación en tiempo real.",
+        });
+      },
+      canal,
+      token,
+      setEstadoConexion,
+    );
 
-    return () => desuscribir();
-  }, [user?.id, user?.rol]);
+    return desconectar;
+  }, [token, user?.id, user?.rol]);
 
   useEffect(() => {
     if (!toast) {
@@ -54,7 +60,14 @@ function RealtimeNotificationsProvider({ children }) {
   const cerrarNotificacion = () => setToast(null);
 
   return (
-    <RealtimeNotificationsContext.Provider value={{ ultimoEvento, toast, cerrarNotificacion, estadoConexion }}>
+    <RealtimeNotificationsContext.Provider
+      value={{
+        ultimoEvento,
+        toast,
+        cerrarNotificacion,
+        estadoConexion,
+      }}
+    >
       {children}
 
       {toast && (
@@ -90,7 +103,9 @@ function useRealtimeNotifications() {
   const context = useContext(RealtimeNotificationsContext);
 
   if (!context) {
-    throw new Error("useRealtimeNotifications debe utilizarse dentro de RealtimeNotificationsProvider");
+    throw new Error(
+      "useRealtimeNotifications debe utilizarse dentro de RealtimeNotificationsProvider",
+    );
   }
 
   return context;

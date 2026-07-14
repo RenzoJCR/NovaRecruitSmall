@@ -6,6 +6,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,7 @@ import com.novarecruit.backend.repository.VacanteRepository; // WebSocket para n
 @Service
 public class PostulacionService {
 
+    private static final Logger log = LoggerFactory.getLogger(PostulacionService.class);
     private static final int PUNTAJE_MAXIMO_EXAMEN = 20;
 
     private final PostulacionRepository postulacionRepository;
@@ -50,13 +53,19 @@ public class PostulacionService {
         Usuario usuario = usuarioRepository.findByCorreo(correoPostulante)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Websocket: Alerta al canal de administradores sobre la nueva postulación
-        messagingTemplate.convertAndSend((String) "/topic/admin/notificaciones", (Object) Map.of(
-            "tipo", "NUEVA_POSTULACION",
-            "mensaje", "El candidato " + usuario.getNombres() + " ha postulado a la vacante ID: " + request.vacanteId()
+        PostulacionResponse respuesta = registrarPostulacion(request.vacanteId(), usuario.getId());
+
+        String canalAdmin = "/topic/admin/notificaciones";
+        messagingTemplate.convertAndSend(canalAdmin, (Object) Map.of(
+                "tipo", "NUEVA_POSTULACION",
+                "mensaje", "El candidato " + usuario.getNombres()
+                        + " ha postulado a la vacante ID: " + request.vacanteId()
         ));
 
-        return registrarPostulacion(request.vacanteId(), usuario.getId());
+        log.info("[WS-SEND] Evento NUEVA_POSTULACION enviado: canal={}, postulacionId={}, userId={}, vacanteId={}",
+                canalAdmin, respuesta.id(), usuario.getId(), request.vacanteId());
+
+        return respuesta;
 
     }
 
@@ -103,15 +112,19 @@ public class PostulacionService {
         postulacion.setEstado(nuevoEstado.toUpperCase().trim());
         postulacion.setComentariosInternos("Última actualización de estado por: " + correoOperador);
 
-        // Websocket: Alerta dirigida al canal del Postulante
-        String canalPostulante = "/topic/user/notificaciones/" + postulacion.getUsuario().getId();
-        messagingTemplate.convertAndSend((String)canalPostulante, (Object) Map.of(
-            "tipo", "ACTUALIZACION_ESTADO",
-            "mensaje", "Tu postulación a la vacante '" + postulacion.getVacante().getTitulo() + "' ha sido actualizada a: " + nuevoEstado
+        Postulacion guardada = postulacionRepository.save(postulacion);
+
+        String canalPostulante = "/topic/user/notificaciones/" + guardada.getUsuario().getId();
+        messagingTemplate.convertAndSend(canalPostulante, (Object) Map.of(
+                "tipo", "ACTUALIZACION_ESTADO",
+                "mensaje", "Tu postulación a la vacante '" + guardada.getVacante().getTitulo()
+                        + "' ha sido actualizada a: " + guardada.getEstado()
         ));
 
+        log.info("[WS-SEND] Evento ACTUALIZACION_ESTADO enviado: canal={}, postulacionId={}, estado={}",
+                canalPostulante, guardada.getId(), guardada.getEstado());
 
-        return PostulacionMapper.toResponse(postulacionRepository.save(postulacion));
+        return PostulacionMapper.toResponse(guardada);
     }
 
     @Transactional
@@ -161,21 +174,28 @@ public class PostulacionService {
         postulacion.setEstado("EVALUADO");
         postulacion.setFechaEvaluacion(LocalDateTime.now());
 
-        // Websocket: Avisa al administrador cuando el examen ha sido calificado
-        messagingTemplate.convertAndSend((String) "/topic/admin/notificaciones", (Object) Map.of(
-            "tipo", "EVALUACION_CALIFICADA",
-            "mensaje", "El candidato " + postulacion.getUsuario().getNombres() + " ha completado la evaluación técnica de la vacante '" + postulacion.getVacante().getTitulo() + "' con un puntaje de: " + puntajeTotal
+        Postulacion guardada = postulacionRepository.save(postulacion);
+
+        String canalAdmin = "/topic/admin/notificaciones";
+        messagingTemplate.convertAndSend(canalAdmin, (Object) Map.of(
+                "tipo", "EVALUACION_CALIFICADA",
+                "mensaje", "El candidato " + guardada.getUsuario().getNombres()
+                        + " ha completado la evaluación técnica de la vacante '"
+                        + guardada.getVacante().getTitulo() + "' con un puntaje de: " + puntajeTotal
         ));
 
-        // Websocket: También notificamos al postulante con su resultado final en tiempo real
-        String canalPostulante = "/topic/user/notificaciones/" + postulacion.getUsuario().getId();
-        messagingTemplate.convertAndSend((String) canalPostulante, (Object) Map.of(
-            "tipo", "EVALUACION_CALIFICADA",
-            "mensaje", "Tu evaluación técnica de la vacante '" + postulacion.getVacante().getTitulo() + "' fue calificada con: " + puntajeTotal + " / 20"
+        String canalPostulante = "/topic/user/notificaciones/" + guardada.getUsuario().getId();
+        messagingTemplate.convertAndSend(canalPostulante, (Object) Map.of(
+                "tipo", "EVALUACION_CALIFICADA",
+                "mensaje", "Tu evaluación técnica de la vacante '"
+                        + guardada.getVacante().getTitulo() + "' fue calificada con: "
+                        + puntajeTotal + " / 20"
         ));
 
+        log.info("[WS-SEND] Evento EVALUACION_CALIFICADA enviado: postulacionId={}, puntaje={}, canales=[{}, {}]",
+                guardada.getId(), puntajeTotal, canalAdmin, canalPostulante);
 
-        return PostulacionMapper.toResponse(postulacionRepository.save(postulacion));
+        return PostulacionMapper.toResponse(guardada);
     }
 
     // ACCESOS EXPUESTOS PARA LAS GRÁFICAS DE SERIES DE TIEMPO

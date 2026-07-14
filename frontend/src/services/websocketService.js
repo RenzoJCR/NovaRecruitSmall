@@ -3,35 +3,41 @@ import SockJS from "sockjs-client";
 
 export const crearConexionWebSocket = (
   onMessageReceived,
-  canal = "/topic/admin/notificaciones",
-  onStatusChange
+  canal,
+  token,
+  onStatusChange,
 ) => {
   const wsUrl = import.meta.env.VITE_WS_URL || "http://localhost:8080/ws";
 
-  // Configuración del cliente STOMP sobre el endpoint SockJS de Spring Boot
+  if (!token) {
+    throw new Error("No se puede conectar al WebSocket sin un token JWT");
+  }
+
   const client = new Client({
     webSocketFactory: () => new SockJS(wsUrl),
-    reconnectDelay: 5000, // Intento automático de reconexión si se cae Azure cada 5 seg
+    connectHeaders: {
+      Authorization: `Bearer ${token}`,
+    },
+    reconnectDelay: 5000,
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,
   });
 
-  console.debug("[WebSocket] inicializando cliente", { canal, wsUrl });
+  console.debug("[WebSocket] Inicializando cliente", { canal, wsUrl });
+  onStatusChange?.("conectando");
 
-  if (onStatusChange) {
-    onStatusChange("conectando");
-  }
-
-  let timeoutConexion = null;
-
-  timeoutConexion = window.setTimeout(() => {
+  let timeoutConexion = window.setTimeout(() => {
     onStatusChange?.("error");
-    console.error("Timeout de conexión WebSocket: el broker no respondió dentro del tiempo esperado.");
+    console.error(
+      "[WebSocket] El broker no respondió dentro del tiempo esperado.",
+    );
     client.deactivate();
   }, 12000);
 
   client.onWebSocketOpen = () => {
-    console.debug("[WebSocket] socket físico abierto, esperando handshake STOMP...");
+    console.debug(
+      "[WebSocket] Socket físico abierto; iniciando autenticación STOMP.",
+    );
   };
 
   client.onConnect = () => {
@@ -40,16 +46,20 @@ export const crearConexionWebSocket = (
       timeoutConexion = null;
     }
 
-    console.log("[WebSocket] STOMP conectado exitosamente a Spring Boot.");
+    console.log("[WebSocket] STOMP conectado y autenticado correctamente.");
     onStatusChange?.("conectado");
-    
-    // Nos suscribimos al canal dinámico configurado en tu PostulacionService
-    console.debug("[WebSocket] suscribiendo al canal", canal);
+
     client.subscribe(canal, (message) => {
-      if (message.body) {
+      if (!message.body) {
+        return;
+      }
+
+      try {
         const payload = JSON.parse(message.body);
-        console.debug("[WebSocket] mensaje recibido", payload);
-        onMessageReceived(payload); // Enviamos el JSON limpio a la pantalla de React
+        console.debug("[WebSocket] Mensaje recibido", payload);
+        onMessageReceived(payload);
+      } catch (error) {
+        console.error("[WebSocket] Mensaje inválido recibido", error);
       }
     });
   };
@@ -60,7 +70,11 @@ export const crearConexionWebSocket = (
       timeoutConexion = null;
     }
 
-    console.error("[WebSocket] Error STOMP:", frame.headers["message"], frame.body);
+    console.error(
+      "[WebSocket] Error STOMP:",
+      frame.headers.message,
+      frame.body,
+    );
     onStatusChange?.("error");
   };
 
@@ -70,23 +84,22 @@ export const crearConexionWebSocket = (
       timeoutConexion = null;
     }
 
-    console.warn("[WebSocket] socket cerrado");
-    onStatusChange?.("desconectado");
+    if (client.active) {
+      console.warn("[WebSocket] Conexión perdida; se intentará reconectar.");
+      onStatusChange?.("reconectando");
+    } else {
+      console.log("[WebSocket] Conexión cerrada correctamente.");
+      onStatusChange?.("desconectado");
+    }
   };
 
   client.onWebSocketError = (event) => {
-    console.error("[WebSocket] error físico del socket", event);
+    console.error("[WebSocket] Error físico del socket", event);
     onStatusChange?.("reconectando");
   };
 
-  client.onDisconnect = () => {
-    console.warn("[WebSocket] desconectado por STOMP");
-    onStatusChange?.("desconectado");
-  };
+  client.activate();
 
-  client.activate(); // Encendemos la escucha real de red
-
-  // Retornamos una función de apagado para limpiar la memoria cuando el usuario cierre la pestaña
   return () => {
     if (timeoutConexion) {
       window.clearTimeout(timeoutConexion);
@@ -94,6 +107,5 @@ export const crearConexionWebSocket = (
     }
 
     client.deactivate();
-    console.log("[WebSocket] antena desconectada de forma segura.");
   };
 };
