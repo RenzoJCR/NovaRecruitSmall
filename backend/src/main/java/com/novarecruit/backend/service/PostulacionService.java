@@ -286,35 +286,116 @@ public class PostulacionService {
     }
 
     /*
-     * Cambio de estado realizado por un administrador.
+     * Registra o corrige la decisión final
+     * de una postulación.
+     *
+     * Estados permitidos como decisión:
+     * - CONTRATADO
+     * - RECHAZADO
+     *
+     * No elimina respuestas, puntajes,
+     * evaluaciones ni datos históricos.
      */
     @Transactional
     public PostulacionResponse actualizarEstado(
             Long postulacionId,
             String nuevoEstado,
-            String correoOperador) {
+            String correoOperador
+    ) {
+        if (
+                nuevoEstado == null
+                        || nuevoEstado.isBlank()
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debe indicar la decisión final"
+            );
+        }
 
-        Postulacion postulacion = postulacionRepository
-                .findById(postulacionId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Postulación no encontrada"
-                ));
+        String estadoNormalizado =
+                nuevoEstado
+                        .trim()
+                        .toUpperCase();
 
-        String estadoAnterior = postulacion.getEstado();
-        String estadoNormalizado = nuevoEstado.toUpperCase().trim();
+        if (
+                !"CONTRATADO".equals(
+                        estadoNormalizado
+                )
+                        && !"RECHAZADO".equals(
+                        estadoNormalizado
+                )
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La decisión debe ser CONTRATADO o RECHAZADO"
+            );
+        }
 
-        postulacion.setEstado(estadoNormalizado);
+        Postulacion postulacion =
+                postulacionRepository
+                        .findById(postulacionId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Postulación no encontrada"
+                                )
+                        );
+
+        String estadoAnterior =
+                postulacion.getEstado() == null
+                        ? ""
+                        : postulacion
+                        .getEstado()
+                        .trim()
+                        .toUpperCase();
+
+        /*
+         * Un postulante que todavía no rindió
+         * su evaluación no puede recibir una
+         * decisión final.
+         */
+        if (
+                "POSTULADO".equals(
+                        estadoAnterior
+                )
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "El candidato debe completar la evaluación antes de registrar una decisión final"
+            );
+        }
+
+        if (
+                estadoAnterior.equals(
+                        estadoNormalizado
+                )
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "La postulación ya tiene registrada esa decisión"
+            );
+        }
+
+        postulacion.setEstado(
+                estadoNormalizado
+        );
+
         postulacion.setComentariosInternos(
-                "Última actualización de estado por: "
+                "Decisión modificada de "
+                        + estadoAnterior
+                        + " a "
+                        + estadoNormalizado
+                        + " por: "
                         + correoOperador
         );
 
         Postulacion guardada =
-                postulacionRepository.save(postulacion);
+                postulacionRepository.save(
+                        postulacion
+                );
 
         log.info(
-                "[DB] Estado de postulación actualizado en MySQL. "
+                "[DB] Decisión final actualizada. "
                         + "postulacionId={}, estadoAnterior={}, "
                         + "estadoNuevo={}, operador={}",
                 guardada.getId(),
@@ -325,7 +406,9 @@ public class PostulacionService {
 
         String canalPostulante =
                 "/topic/user/notificaciones/"
-                        + guardada.getUsuario().getId();
+                        + guardada
+                        .getUsuario()
+                        .getId();
 
         messagingTemplate.convertAndSend(
                 canalPostulante,
@@ -334,22 +417,27 @@ public class PostulacionService {
                         "ACTUALIZACION_ESTADO",
 
                         "mensaje",
-                        "Tu postulación a la vacante '"
-                                + guardada.getVacante().getTitulo()
-                                + "' ha sido actualizada a: "
-                                + guardada.getEstado()
+                        "La decisión de tu postulación a la vacante '"
+                                + guardada
+                                .getVacante()
+                                .getTitulo()
+                                + "' fue actualizada a: "
+                                + guardada
+                                .getEstado()
                 )
         );
 
         log.info(
-                "[WS-SEND] Evento ACTUALIZACION_ESTADO enviado. "
+                "[WS-SEND] Cambio de decisión notificado. "
                         + "canal={}, postulacionId={}, estado={}",
                 canalPostulante,
                 guardada.getId(),
                 guardada.getEstado()
         );
 
-        return PostulacionMapper.toResponse(guardada);
+        return PostulacionMapper.toResponse(
+                guardada
+        );
     }
 
     /*

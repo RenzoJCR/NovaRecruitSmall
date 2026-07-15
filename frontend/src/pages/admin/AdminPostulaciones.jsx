@@ -195,35 +195,125 @@ function AdminPostulaciones() {
     loadPostulaciones,
   ]);
 
-  const handleUpdatePhase = async (
-    id,
-    faseDestino
+    /*
+  * Cuenta otros candidatos ya contratados
+  * para la misma vacante.
+  *
+  * Se excluye la postulación actual.
+  */
+  const contarOtrosContratados = (
+    postulacionActual
   ) => {
+    return postulaciones.filter(
+      (postulacion) =>
+        postulacion.id !==
+          postulacionActual.id &&
+        Number(postulacion.vacanteId) ===
+          Number(
+            postulacionActual.vacanteId
+          ) &&
+        postulacion.estado ===
+          "CONTRATADO"
+    ).length;
+  };
+
+  /*
+  * Registra o corrige una decisión final.
+  *
+  * No cambia automáticamente el estado
+  * de ningún otro candidato.
+  */
+  const handleDecisionChange = async (
+    postulacion,
+    decisionDestino
+  ) => {
+    if (
+      !postulacion ||
+      updatingId !== null
+    ) {
+      return;
+    }
+
+    const estadoActual =
+      postulacion.estado;
+
+    let mensajeConfirmacion = "";
+
+    if (
+      decisionDestino ===
+      "CONTRATADO"
+    ) {
+      const otrosContratados =
+        contarOtrosContratados(
+          postulacion
+        );
+
+      mensajeConfirmacion =
+        `¿Confirmas la contratación de ${postulacion.usuarioNombre}?`;
+
+      if (otrosContratados > 0) {
+        mensajeConfirmacion +=
+          `\n\nAdvertencia: esta vacante ya tiene ${otrosContratados} candidato${otrosContratados === 1 ? "" : "s"} contratado${otrosContratados === 1 ? "" : "s"}.`;
+
+        mensajeConfirmacion +=
+          "\n\nLos demás candidatos no serán rechazados ni modificados automáticamente.";
+      }
+    } else {
+      mensajeConfirmacion =
+        estadoActual === "CONTRATADO"
+          ? `¿Confirmas cambiar la decisión de CONTRATADO a RECHAZADO para ${postulacion.usuarioNombre}?\n\nLa evaluación y el puntaje técnico se conservarán.`
+          : `¿Confirmas rechazar la postulación de ${postulacion.usuarioNombre}?`;
+    }
+
+    const confirmado =
+      window.confirm(
+        mensajeConfirmacion
+      );
+
+    if (!confirmado) {
+      return;
+    }
+
     try {
-      setUpdatingId(id);
+      setUpdatingId(
+        postulacion.id
+      );
 
       const updatedRecord =
         await postulacionService
           .actualizarEstado(
-            id,
-            faseDestino
+            postulacion.id,
+            decisionDestino
           );
 
+      const textoDecision =
+        decisionDestino ===
+        "CONTRATADO"
+          ? "CONTRATADO"
+          : "RECHAZADO";
+
       showMessage(
-        `El proceso del candidato fue actualizado a: ${faseDestino}.`,
+        estadoActual ===
+          "CONTRATADO" ||
+          estadoActual ===
+            "RECHAZADO"
+          ? `La decisión fue cambiada correctamente a: ${textoDecision}.`
+          : `La decisión final fue registrada como: ${textoDecision}.`,
         "success"
       );
 
       setPostulaciones((prev) =>
-        prev.map((postulacion) =>
-          postulacion.id === id
+        prev.map((item) =>
+          item.id ===
+          postulacion.id
             ? updatedRecord
-            : postulacion
+            : item
         )
       );
 
       if (
-        selectedPostulacion?.id === id
+        selectedPostulacion?.id ===
+        postulacion.id
       ) {
         setSelectedPostulacion(
           updatedRecord
@@ -231,14 +321,15 @@ function AdminPostulaciones() {
       }
     } catch (error) {
       console.error(
-        "Error al actualizar postulación:",
+        "Error al actualizar la decisión:",
         error
       );
 
       showMessage(
         error.userMessage ||
-          error.response?.data?.message ||
-          "No se pudo actualizar la fase del pipeline.",
+          error.response?.data
+            ?.message ||
+          "No se pudo actualizar la decisión final.",
         "error"
       );
     } finally {
@@ -900,8 +991,8 @@ function AdminPostulaciones() {
                     <button
                       type="button"
                       onClick={() =>
-                        handleUpdatePhase(
-                          selectedPostulacion.id,
+                        handleDecisionChange(
+                          selectedPostulacion,
                           "RECHAZADO"
                         )
                       }
@@ -921,8 +1012,8 @@ function AdminPostulaciones() {
                     <button
                       type="button"
                       onClick={() =>
-                        handleUpdatePhase(
-                          selectedPostulacion.id,
+                        handleDecisionChange(
+                          selectedPostulacion,
                           "CONTRATADO"
                         )
                       }
@@ -952,23 +1043,81 @@ function AdminPostulaciones() {
                   </div>
                 ) : (
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
-                    <p className="text-sm text-slate-300 font-semibold">
-                      Proceso finalizado con
-                      estado:{" "}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="sm:mr-auto">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                          Decisión actual
+                        </p>
 
-                      <span
-                        className={
-                          selectedPostulacion.estado ===
-                          "CONTRATADO"
-                            ? "text-emerald-400"
-                            : "text-rose-400"
-                        }
-                      >
-                        {
-                          selectedPostulacion.estado
-                        }
-                      </span>
-                    </p>
+                        <p className="text-sm text-slate-300 font-semibold mt-1">
+                          El proceso está finalizado como:{" "}
+
+                          <span
+                            className={
+                              selectedPostulacion.estado ===
+                              "CONTRATADO"
+                                ? "text-emerald-400"
+                                : "text-rose-400"
+                            }
+                          >
+                            {
+                              selectedPostulacion.estado
+                            }
+                          </span>
+                        </p>
+
+                        <p className="text-xs text-slate-500 mt-1">
+                          Puedes corregir esta decisión.
+                          La evaluación y el puntaje no
+                          serán eliminados.
+                        </p>
+                      </div>
+
+                      {selectedPostulacion.estado ===
+                      "CONTRATADO" ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDecisionChange(
+                              selectedPostulacion,
+                              "RECHAZADO"
+                            )
+                          }
+                          disabled={
+                            updatingId !== null
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-rose-300 text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                        >
+                          <XCircle size={14} />
+
+                          {updatingId ===
+                          selectedPostulacion.id
+                            ? "Actualizando..."
+                            : "Cambiar decisión a rechazado"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDecisionChange(
+                              selectedPostulacion,
+                              "CONTRATADO"
+                            )
+                          }
+                          disabled={
+                            updatingId !== null
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-300 text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                        >
+                          <CheckCircle size={14} />
+
+                          {updatingId ===
+                          selectedPostulacion.id
+                            ? "Actualizando..."
+                            : "Cambiar decisión a contratado"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
