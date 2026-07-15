@@ -108,15 +108,7 @@ function Login() {
             </button>
           </form>
 
-          {/* Sección Informativa Reciclada */}
-          <div className="mt-6 rounded-3xl bg-emerald-50 border border-emerald-100 p-4">
-            <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-emerald-600 shrink-0 mt-1" />
-              <p className="text-sm text-slate-600">
-                Usa el usuario semilla <strong>admin@novarecruit.com</strong> con la contraseña <strong>admin123</strong> para acceder al panel de control.
-              </p>
-            </div>
-          </div>
+          
 
           <p className="text-center text-sm text-slate-500 mt-6">
             ¿No tienes cuenta?{" "}

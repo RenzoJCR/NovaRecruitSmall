@@ -747,75 +747,7 @@ function AdminPostulaciones() {
           )}
         </main>
 
-        <aside>
-          <section className="bg-slate-950 border border-slate-800 text-slate-200 rounded-2xl p-4 shadow-md sticky top-6 space-y-4">
-            <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
-              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                <Radio
-                  size={15}
-                  className="text-rose-500 animate-ping"
-                />
-
-                Mensajería WebSocket
-              </h3>
-
-              <span className="text-[9px] font-black bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full border border-rose-500/20">
-                STOMP/WS
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Consola conectada al broker de
-              Spring Boot. Los eventos se
-              reciben sin actualizar el
-              navegador.
-            </p>
-
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {websocketAlerts.length ===
-              0 ? (
-                <div className="bg-slate-900/80 border border-white/5 p-3 rounded-xl">
-                  <p className="text-xs text-slate-500">
-                    Esperando nuevos eventos...
-                  </p>
-                </div>
-              ) : (
-                websocketAlerts.map(
-                  (alerta) => (
-                    <div
-                      key={alerta.id}
-                      className="bg-slate-900/80 border border-white/5 p-3 rounded-xl space-y-1 animate-slide-in"
-                    >
-                      <div className="flex justify-between items-center text-[10px] font-black">
-                        <span
-                          className={
-                            alerta.tipo ===
-                            "EVALUACION_CALIFICADA"
-                              ? "text-purple-400"
-                              : alerta.tipo ===
-                                  "NUEVA_POSTULACION"
-                                ? "text-sky-400"
-                                : "text-emerald-400"
-                          }
-                        >
-                          {alerta.tipo}
-                        </span>
-
-                        <span className="text-slate-500">
-                          Ahora
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 font-medium leading-tight">
-                        {alerta.mensaje}
-                      </p>
-                    </div>
-                  )
-                )
-              )}
-            </div>
-          </section>
-        </aside>
+        
       </div>
 
       {/* MODAL DEL EXPEDIENTE */}
