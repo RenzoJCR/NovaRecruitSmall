@@ -147,12 +147,9 @@ function AdminVacantes() {
       try {
         setLoading(true);
 
-        const [
-          vacantesData,
-          areasData,
-        ] = await Promise.all([
+        const [vacantesData, areasData] = await Promise.all([
           vacanteService.listarAdmin(),
-          areaService.getAll(),
+          areaService.getActive(),
         ]);
 
         setVacantes(
@@ -204,10 +201,8 @@ function AdminVacantes() {
     }));
   };
 
-  const handleCreateVacante = async (
-    event
-  ) => {
-    event.preventDefault();
+  const handleCreateVacante = async (e) => {
+    e.preventDefault();
 
     if (
       !vacanteForm.areaId ||
@@ -222,21 +217,52 @@ function AdminVacantes() {
       return;
     }
 
+    /*
+    * Comprobación adicional en el frontend:
+    * el área seleccionada debe continuar dentro
+    * del listado de áreas activas.
+    */
+    const areaSeleccionada = areas.find(
+      (area) =>
+        Number(area.id) ===
+        Number(vacanteForm.areaId)
+    );
+
+    if (!areaSeleccionada) {
+      showMessage(
+        "El área seleccionada ya no está activa. Actualiza el formulario y selecciona otra área.",
+        "error"
+      );
+
+      setVacanteForm((prev) => ({
+        ...prev,
+        areaId: "",
+      }));
+
+      await loadData();
+      return;
+    }
+
     const payload = {
       areaId: Number(
         vacanteForm.areaId
       ),
+
       titulo:
         vacanteForm.titulo.trim(),
+
       descripcion:
         vacanteForm.descripcion.trim(),
+
       modalidad:
         vacanteForm.modalidad,
-      salario: vacanteForm.salario
-        ? Number(
-            vacanteForm.salario
-          )
-        : null,
+
+      salario:
+        vacanteForm.salario
+          ? Number(
+              vacanteForm.salario
+            )
+          : null,
     };
 
     try {
@@ -257,6 +283,7 @@ function AdminVacantes() {
     } catch (error) {
       showMessage(
         error.userMessage ||
+          error.response?.data?.message ||
           "No se pudo publicar la vacante.",
         "error"
       );
@@ -515,6 +542,9 @@ function AdminVacantes() {
       "TODAS"
     );
   };
+
+  const noHayAreasActivas =
+    !loading && areas.length === 0;
 
   return (
     <div className="space-y-6">
@@ -918,18 +948,21 @@ function AdminVacantes() {
 
                 <select
                   name="areaId"
-                  value={
-                    vacanteForm.areaId
+                  value={vacanteForm.areaId}
+                  onChange={handleVacanteChange}
+                  disabled={
+                    loading ||
+                    noHayAreasActivas
                   }
-                  onChange={
-                    handleVacanteChange
-                  }
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:border-rose-500 text-sm font-bold text-slate-800"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:border-rose-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-sm font-bold text-slate-800"
                   required
                 >
                   <option value="">
-                    -- Selecciona una
-                    categoría --
+                    {loading
+                      ? "Cargando áreas activas..."
+                      : noHayAreasActivas
+                        ? "No existen áreas activas"
+                        : "-- Selecciona un área activa --"}
                   </option>
 
                   {areas.map((area) => (
@@ -941,6 +974,16 @@ function AdminVacantes() {
                     </option>
                   ))}
                 </select>
+
+                {noHayAreasActivas ? (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-2">
+                    No puedes publicar vacantes porque no existen áreas activas. Activa o registra un área tecnológica primero.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Solo se muestran áreas tecnológicas activas.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1032,13 +1075,20 @@ function AdminVacantes() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="w-full inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-sm font-black shadow-md cursor-pointer transition-all"
-              >
-                <Save size={16} />
-                Publicar oferta TI
-              </button>
+                <button
+                  type="submit"
+                  disabled={
+                    loading ||
+                    noHayAreasActivas
+                  }
+                  className="w-full inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-black shadow-md cursor-pointer transition-all"
+                >
+                  <Save size={16} />
+
+                  {noHayAreasActivas
+                    ? "Sin áreas disponibles"
+                    : "Publicar oferta TI"}
+                </button>
             </form>
           </section>
         </aside>

@@ -9,8 +9,10 @@ import com.novarecruit.backend.mapper.VacanteMapper;
 import com.novarecruit.backend.repository.AreaRepository;
 import com.novarecruit.backend.repository.UsuarioRepository;
 import com.novarecruit.backend.repository.VacanteRepository;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +24,9 @@ import java.util.List;
 public class VacanteService {
 
     private static final Logger log =
-            LoggerFactory.getLogger(VacanteService.class);
+            LoggerFactory.getLogger(
+                    VacanteService.class
+            );
 
     private final VacanteRepository vacanteRepository;
     private final AreaRepository areaRepository;
@@ -31,45 +35,102 @@ public class VacanteService {
     public VacanteService(
             VacanteRepository vacanteRepository,
             AreaRepository areaRepository,
-            UsuarioRepository usuarioRepository) {
+            UsuarioRepository usuarioRepository
+    ) {
+        this.vacanteRepository =
+                vacanteRepository;
 
-        this.vacanteRepository = vacanteRepository;
-        this.areaRepository = areaRepository;
-        this.usuarioRepository = usuarioRepository;
+        this.areaRepository =
+                areaRepository;
+
+        this.usuarioRepository =
+                usuarioRepository;
     }
 
     @Transactional
     public VacanteResponse crearVacante(
             VacanteRequest request,
-            String operador) {
-
+            String operador
+    ) {
         Area area = areaRepository
                 .findById(request.areaId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "El área tecnológica no fue encontrada"
-                ));
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "El área tecnológica no fue encontrada"
+                        )
+                );
 
-        Usuario administrador = usuarioRepository
-                .findByCorreo(operador)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "El administrador autenticado no fue encontrado"
-                ));
+        /*
+         * Regla de negocio:
+         *
+         * Una nueva vacante solamente puede
+         * asociarse a un área activa.
+         *
+         * Las vacantes antiguas conservan su área
+         * aunque posteriormente sea desactivada.
+         */
+        if (!Boolean.TRUE.equals(
+                area.getActivo()
+        )) {
+            log.warn(
+                    "[VACANTE] Intento de crear una vacante "
+                            + "con un área inactiva. "
+                            + "areaId={}, areaNombre='{}', operador={}",
+                    area.getId(),
+                    area.getNombre(),
+                    operador
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No se puede crear una vacante con un área inactiva."
+            );
+        }
+
+        Usuario administrador =
+                usuarioRepository
+                        .findByCorreo(operador)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "El administrador autenticado no fue encontrado"
+                                )
+                        );
 
         Vacante vacante = new Vacante();
+
         vacante.setArea(area);
-        vacante.setAdministrador(administrador);
-        vacante.setTitulo(request.titulo());
-        vacante.setDescripcion(request.descripcion());
-        vacante.setModalidad(
-                request.modalidad().toUpperCase().trim()
+        vacante.setAdministrador(
+                administrador
         );
-        vacante.setSalario(request.salario());
-        vacante.setCreadoPor(operador);
+
+        vacante.setTitulo(
+                request.titulo()
+        );
+
+        vacante.setDescripcion(
+                request.descripcion()
+        );
+
+        vacante.setModalidad(
+                request.modalidad()
+                        .toUpperCase()
+                        .trim()
+        );
+
+        vacante.setSalario(
+                request.salario()
+        );
+
+        vacante.setCreadoPor(
+                operador
+        );
 
         Vacante guardada =
-                vacanteRepository.save(vacante);
+                vacanteRepository.save(
+                        vacante
+                );
 
         log.info(
                 "[DB] Vacante guardada en MySQL. "
@@ -81,7 +142,9 @@ public class VacanteService {
                 operador
         );
 
-        return VacanteMapper.toResponse(guardada);
+        return VacanteMapper.toResponse(
+                guardada
+        );
     }
 
     /*
@@ -89,7 +152,8 @@ public class VacanteService {
      * solamente muestra vacantes activas.
      */
     @Transactional(readOnly = true)
-    public List<VacanteResponse> listarActivas() {
+    public List<VacanteResponse>
+    listarActivas() {
 
         List<VacanteResponse> vacantes =
                 vacanteRepository
@@ -97,7 +161,9 @@ public class VacanteService {
                                 "ACTIVA"
                         )
                         .stream()
-                        .map(VacanteMapper::toResponse)
+                        .map(
+                                VacanteMapper::toResponse
+                        )
                         .toList();
 
         log.info(
@@ -114,13 +180,16 @@ public class VacanteService {
      * muestra vacantes activas y cerradas.
      */
     @Transactional(readOnly = true)
-    public List<VacanteResponse> listarTodasAdmin() {
+    public List<VacanteResponse>
+    listarTodasAdmin() {
 
         List<VacanteResponse> vacantes =
                 vacanteRepository
                         .findAllByOrderByFechaCreacionDesc()
                         .stream()
-                        .map(VacanteMapper::toResponse)
+                        .map(
+                                VacanteMapper::toResponse
+                        )
                         .toList();
 
         log.info(
@@ -133,22 +202,28 @@ public class VacanteService {
     }
 
     /*
-     * El detalle público solo puede mostrar una vacante activa.
-     * Una vacante cerrada no debe seguir siendo visible
-     * modificando manualmente la URL.
+     * El detalle público solo puede mostrar
+     * una vacante activa.
      */
     @Transactional(readOnly = true)
-    public VacanteResponse obtenerActivaPorId(Long id) {
+    public VacanteResponse obtenerActivaPorId(
+            Long id
+    ) {
+        Vacante vacante =
+                vacanteRepository
+                        .findById(id)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Vacante no encontrada"
+                                )
+                        );
 
-        Vacante vacante = vacanteRepository
-                .findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Vacante no encontrada"
-                ));
-
-        if (!"ACTIVA".equalsIgnoreCase(vacante.getEstado())) {
-
+        if (
+                !"ACTIVA".equalsIgnoreCase(
+                        vacante.getEstado()
+                )
+        ) {
             log.warn(
                     "[VACANTE] Intento de consultar públicamente "
                             + "una vacante no activa. "
@@ -163,23 +238,31 @@ public class VacanteService {
             );
         }
 
-        return VacanteMapper.toResponse(vacante);
+        return VacanteMapper.toResponse(
+                vacante
+        );
     }
 
     @Transactional
     public VacanteResponse cambiarEstado(
             Long id,
             String nuevoEstado,
-            String operador) {
+            String operador
+    ) {
+        Vacante vacante =
+                vacanteRepository
+                        .findById(id)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Vacante no encontrada"
+                                )
+                        );
 
-        Vacante vacante = vacanteRepository
-                .findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Vacante no encontrada"
-                ));
-
-        if (nuevoEstado == null || nuevoEstado.isBlank()) {
+        if (
+                nuevoEstado == null ||
+                        nuevoEstado.isBlank()
+        ) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Debe indicar el nuevo estado de la vacante"
@@ -187,11 +270,17 @@ public class VacanteService {
         }
 
         String estadoNormalizado =
-                nuevoEstado.toUpperCase().trim();
+                nuevoEstado
+                        .toUpperCase()
+                        .trim();
 
         if (
-                !"ACTIVA".equals(estadoNormalizado)
-                        && !"CERRADA".equals(estadoNormalizado)
+                !"ACTIVA".equals(
+                        estadoNormalizado
+                ) &&
+                        !"CERRADA".equals(
+                                estadoNormalizado
+                        )
         ) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -199,13 +288,21 @@ public class VacanteService {
             );
         }
 
-        String estadoAnterior = vacante.getEstado();
+        String estadoAnterior =
+                vacante.getEstado();
 
-        vacante.setEstado(estadoNormalizado);
-        vacante.setModificadoPor(operador);
+        vacante.setEstado(
+                estadoNormalizado
+        );
+
+        vacante.setModificadoPor(
+                operador
+        );
 
         Vacante guardada =
-                vacanteRepository.save(vacante);
+                vacanteRepository.save(
+                        vacante
+                );
 
         log.info(
                 "[DB] Estado de vacante actualizado en MySQL. "
@@ -217,6 +314,8 @@ public class VacanteService {
                 operador
         );
 
-        return VacanteMapper.toResponse(guardada);
+        return VacanteMapper.toResponse(
+                guardada
+        );
     }
 }
