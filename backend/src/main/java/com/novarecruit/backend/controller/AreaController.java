@@ -14,11 +14,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -44,7 +46,8 @@ public class AreaController {
     /*
      * GET /api/areas
      *
-     * Lista todas las áreas registradas.
+     * Devuelve áreas activas e inactivas
+     * para la pantalla administrativa.
      */
     @GetMapping
     public ResponseEntity<List<AreaResponse>>
@@ -60,10 +63,23 @@ public class AreaController {
     }
 
     /*
-     * POST /api/areas
+     * GET /api/areas/activas
      *
-     * Crea una nueva área.
+     * Se usará en los formularios de vacantes.
      */
+    @GetMapping("/activas")
+    public ResponseEntity<List<AreaResponse>>
+    listarActivas() {
+
+        log.info(
+                "Listando áreas tecnológicas activas"
+        );
+
+        return ResponseEntity.ok(
+                areaService.listarActivas()
+        );
+    }
+
     @PostMapping
     public ResponseEntity<AreaResponse>
     crearArea(
@@ -81,22 +97,11 @@ public class AreaController {
                         correoOperador
                 );
 
-        log.info(
-                "Área tecnológica creada con éxito: {}",
-                response.nombre()
-        );
-
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
     }
 
-    /*
-     * PUT /api/areas/{id}
-     *
-     * Actualiza el nombre y la descripción
-     * de un área existente.
-     */
     @PutMapping("/{id}")
     public ResponseEntity<AreaResponse>
     actualizarArea(
@@ -106,24 +111,42 @@ public class AreaController {
             String correoOperador
     ) {
         log.info(
-                "Actualizando área tecnológica ID {} por {}",
+                "Actualizando área ID {} por {}",
                 id,
                 correoOperador
         );
 
-        AreaResponse response =
+        return ResponseEntity.ok(
                 areaService.actualizarArea(
                         id,
                         request
-                );
+                )
+        );
+    }
 
+    /*
+     * PATCH /api/areas/{id}/estado?activo=false
+     */
+    @PatchMapping("/{id}/estado")
+    public ResponseEntity<AreaResponse>
+    cambiarEstado(
+            @PathVariable Long id,
+            @RequestParam boolean activo,
+            @AuthenticationPrincipal
+            String correoOperador
+    ) {
         log.info(
-                "Área tecnológica actualizada: {}",
-                response.nombre()
+                "Cambiando estado del área ID {} a {} por {}",
+                id,
+                activo,
+                correoOperador
         );
 
         return ResponseEntity.ok(
-                response
+                areaService.cambiarEstado(
+                        id,
+                        activo
+                )
         );
     }
 }

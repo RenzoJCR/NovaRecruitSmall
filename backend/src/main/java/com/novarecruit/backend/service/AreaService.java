@@ -24,9 +24,6 @@ public class AreaService {
         this.areaRepository = areaRepository;
     }
 
-    /*
-     * Crea una nueva área tecnológica.
-     */
     @Transactional
     public AreaResponse crearArea(
             AreaRequest request,
@@ -57,26 +54,14 @@ public class AreaService {
         Area area = new Area();
         area.setNombre(nombre);
         area.setDescripcion(descripcion);
+        area.setActivo(true);
         area.setCreadoPor(operador);
 
-        Area guardada =
-                areaRepository.save(area);
-
         return AreaMapper.toResponse(
-                guardada
+                areaRepository.save(area)
         );
     }
 
-    /*
-     * Actualiza únicamente los datos editables:
-     * - nombre
-     * - descripción
-     *
-     * No modifica:
-     * - creadoPor
-     * - fechaCreacion
-     * - vacantes asociadas
-     */
     @Transactional
     public AreaResponse actualizarArea(
             Long areaId,
@@ -84,14 +69,8 @@ public class AreaService {
     ) {
         validarRequest(request);
 
-        Area area = areaRepository
-                .findById(areaId)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "El área tecnológica no existe."
-                        )
-                );
+        Area area =
+                buscarArea(areaId);
 
         String nombre =
                 request.nombre().trim();
@@ -118,39 +97,80 @@ public class AreaService {
         area.setNombre(nombre);
         area.setDescripcion(descripcion);
 
-        Area actualizada =
-                areaRepository.save(area);
-
         return AreaMapper.toResponse(
-                actualizada
+                areaRepository.save(area)
         );
     }
 
     /*
-     * Lista todas las áreas registradas.
+     * Activa o desactiva un área.
+     *
+     * No elimina el registro y tampoco modifica
+     * las vacantes que ya la utilizan.
+     */
+    @Transactional
+    public AreaResponse cambiarEstado(
+            Long areaId,
+            boolean activo
+    ) {
+        Area area =
+                buscarArea(areaId);
+
+        area.setActivo(activo);
+
+        return AreaMapper.toResponse(
+                areaRepository.save(area)
+        );
+    }
+
+    /*
+     * Administración:
+     * muestra activas e inactivas.
      */
     @Transactional(readOnly = true)
     public List<AreaResponse> listarTodas() {
         return areaRepository
-                .findAll()
+                .findAllByOrderByNombreAsc()
                 .stream()
                 .map(AreaMapper::toResponse)
                 .toList();
     }
 
     /*
-     * Validación del backend.
-     *
-     * Aunque React ya valida, el backend también
-     * debe protegerse frente a llamadas directas.
+     * Formularios de creación o edición de vacantes:
+     * solo devuelve áreas disponibles.
      */
+    @Transactional(readOnly = true)
+    public List<AreaResponse> listarActivas() {
+        return areaRepository
+                .findByActivoTrueOrderByNombreAsc()
+                .stream()
+                .map(AreaMapper::toResponse)
+                .toList();
+    }
+
+    private Area buscarArea(
+            Long areaId
+    ) {
+        return areaRepository
+                .findById(areaId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "El área tecnológica no existe."
+                        )
+                );
+    }
+
     private void validarRequest(
             AreaRequest request
     ) {
         if (
                 request == null ||
                         request.nombre() == null ||
-                        request.nombre().trim().isEmpty()
+                        request.nombre()
+                                .trim()
+                                .isEmpty()
         ) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,

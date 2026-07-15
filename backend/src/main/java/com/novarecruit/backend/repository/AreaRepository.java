@@ -1,19 +1,34 @@
 package com.novarecruit.backend.repository;
 
 import com.novarecruit.backend.entity.Area;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
-public interface AreaRepository extends JpaRepository<Area, Long> {
+public interface AreaRepository
+        extends JpaRepository<Area, Long> {
 
-    // Evita registrar dos áreas con el mismo nombre.
-    boolean existsByNombreIgnoreCase(String nombre);
+    boolean existsByNombreIgnoreCase(
+            String nombre
+    );
 
-    // Permite validar nombres repetidos al editar,
-    // ignorando el área que se está modificando.
     boolean existsByNombreIgnoreCaseAndIdNot(
             String nombre,
             Long id
     );
+
+    /*
+     * Administración:
+     * devuelve áreas activas e inactivas.
+     */
+    List<Area> findAllByOrderByNombreAsc();
+
+    /*
+     * Formularios de vacantes:
+     * devuelve solamente áreas activas.
+     */
+    List<Area> findByActivoTrueOrderByNombreAsc();
 }

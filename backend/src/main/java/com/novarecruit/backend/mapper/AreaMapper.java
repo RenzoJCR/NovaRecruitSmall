@@ -5,13 +5,23 @@ import com.novarecruit.backend.entity.Area;
 
 public class AreaMapper {
 
-    public static AreaResponse toResponse(Area area) {
-        if (area == null) return null;
+    private AreaMapper() {
+    }
+
+    public static AreaResponse toResponse(
+            Area area
+    ) {
+        if (area == null) {
+            return null;
+        }
 
         return new AreaResponse(
-            area.getId(),
-            area.getNombre(),
-            area.getDescripcion()
+                area.getId(),
+                area.getNombre(),
+                area.getDescripcion(),
+                Boolean.TRUE.equals(
+                        area.getActivo()
+                )
         );
     }
 }

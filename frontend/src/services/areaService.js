@@ -2,9 +2,8 @@ import api from "./api.js";
 
 export const areaService = {
   /*
-   * GET /api/areas
-   *
-   * Lista todas las áreas disponibles.
+   * Administración:
+   * obtiene áreas activas e inactivas.
    */
   async getAll() {
     const response =
@@ -14,10 +13,16 @@ export const areaService = {
   },
 
   /*
-   * POST /api/areas
-   *
-   * Crea una nueva área tecnológica.
+   * Formularios de vacantes:
+   * obtiene solamente áreas activas.
    */
+  async getActive() {
+    const response =
+      await api.get("/areas/activas");
+
+    return response.data;
+  },
+
   async create(areaData) {
     const response =
       await api.post(
@@ -28,16 +33,32 @@ export const areaService = {
     return response.data;
   },
 
-  /*
-   * PUT /api/areas/{id}
-   *
-   * Actualiza nombre y descripción.
-   */
-  async update(areaId, areaData) {
+  async update(
+    areaId,
+    areaData
+  ) {
     const response =
       await api.put(
         `/areas/${areaId}`,
         areaData
+      );
+
+    return response.data;
+  },
+
+  async changeStatus(
+    areaId,
+    activo
+  ) {
+    const response =
+      await api.patch(
+        `/areas/${areaId}/estado`,
+        null,
+        {
+          params: {
+            activo,
+          },
+        }
       );
 
     return response.data;
