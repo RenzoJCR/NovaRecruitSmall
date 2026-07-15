@@ -37,6 +37,28 @@ export const postulacionService = {
     return response.data;
   },
 
+  calificarEvaluacion: async (
+    postulacionId,
+    payload
+  ) => {
+    const response = await api.post(
+      `/postulaciones/${postulacionId}/evaluar`,
+      payload
+    );
+
+    return response.data;
+  },
+
+  obtenerRespuestasAdmin: async (
+    postulacionId
+  ) => {
+    const response = await api.get(
+      `/postulaciones/${postulacionId}/respuestas`
+    );
+
+    return response.data;
+  },
+
   // 6. Métricas de Atracción y Rendimiento (ADMIN)
 
   async getMetricaAtraccion() {

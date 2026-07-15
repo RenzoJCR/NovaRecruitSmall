@@ -18,6 +18,6 @@ public record PostulacionResponse(
         String estado,
         LocalDateTime fechaPostulacion,
         LocalDateTime fechaEvaluacion,
-        Integer puntajeTecnico,
-        String respuestasPostulante
-) {}
+        Integer puntajeTecnico
+) {
+}

@@ -22,6 +22,9 @@ import com.novarecruit.backend.dto.PostulacionRequest;
 import com.novarecruit.backend.dto.PostulacionResponse;
 import com.novarecruit.backend.service.PostulacionService;
 
+import com.novarecruit.backend.dto.RespuestaPostulanteResponse;
+
+
 @RestController
 @RequestMapping("/api/postulaciones")
 public class PostulacionController {
@@ -124,5 +127,18 @@ public class PostulacionController {
     public ResponseEntity<List<Map<String, Object>>> obtenerMetricaRendimiento() {
         log.info("Administrador consulta la métrica temporal de rendimiento técnico.");
         return ResponseEntity.ok(postulacionService.obtenerDatosMétricaRendimiento());
+    }
+
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    @GetMapping("/{id}/respuestas")
+    public ResponseEntity<
+            List<RespuestaPostulanteResponse>
+            > listarRespuestasAdmin(
+            @PathVariable Long id) {
+
+        return ResponseEntity.ok(
+                postulacionService
+                        .listarRespuestasAdmin(id)
+        );
     }
 }

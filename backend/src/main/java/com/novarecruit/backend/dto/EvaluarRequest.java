@@ -1,6 +1,8 @@
 package com.novarecruit.backend.dto;
 
-// El front nos manda un String con formato JSON conteniendo las respuestas (ej: '{"1":"A","2":"B"}')
+import java.util.List;
+
 public record EvaluarRequest(
-    String respuestasPostulante
-) {}
+        List<RespuestaEvaluacionRequest> respuestas
+) {
+}

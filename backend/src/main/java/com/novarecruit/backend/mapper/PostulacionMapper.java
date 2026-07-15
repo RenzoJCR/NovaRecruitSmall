@@ -3,7 +3,7 @@ package com.novarecruit.backend.mapper;
 import com.novarecruit.backend.dto.PostulacionResponse;
 import com.novarecruit.backend.entity.Postulacion;
 
-public class PostulacionMapper {
+public final class PostulacionMapper {
 
     private PostulacionMapper() {
     }
@@ -16,12 +16,16 @@ public class PostulacionMapper {
         }
 
         String nombreCompleto =
-                postulacion.getUsuario().getNombres()
-                        + " "
-                        + postulacion.getUsuario().getApellidos();
+                (
+                        postulacion.getUsuario().getNombres()
+                                + " "
+                                + postulacion.getUsuario().getApellidos()
+                ).trim();
 
         Long evaluacionId =
-                postulacion.getVacante().getEvaluacion() != null
+                postulacion
+                        .getVacante()
+                        .getEvaluacion() != null
                         ? postulacion
                         .getVacante()
                         .getEvaluacion()
@@ -36,15 +40,17 @@ public class PostulacionMapper {
                 postulacion.getVacante().getId(),
                 postulacion.getVacante().getTitulo(),
                 postulacion.getVacante().getDescripcion(),
-                postulacion.getVacante().getArea().getNombre(),
+                postulacion
+                        .getVacante()
+                        .getArea()
+                        .getNombre(),
                 postulacion.getVacante().getModalidad(),
                 postulacion.getVacante().getSalario(),
                 evaluacionId,
                 postulacion.getEstado(),
                 postulacion.getFechaPostulacion(),
                 postulacion.getFechaEvaluacion(),
-                postulacion.getPuntajeTecnico(),
-                postulacion.getRespuestasPostulante()
+                postulacion.getPuntajeTecnico()
         );
     }
 }

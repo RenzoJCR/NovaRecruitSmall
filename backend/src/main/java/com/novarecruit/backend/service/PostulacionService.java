@@ -15,8 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novarecruit.backend.dto.EvaluarRequest;
 import com.novarecruit.backend.dto.PostulacionRequest;
 import com.novarecruit.backend.dto.PostulacionResponse;
@@ -30,6 +28,16 @@ import com.novarecruit.backend.repository.PostulacionRepository;
 import com.novarecruit.backend.repository.UsuarioRepository;
 import com.novarecruit.backend.repository.VacanteRepository;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+
+import com.novarecruit.backend.dto.RespuestaEvaluacionRequest;
+import com.novarecruit.backend.dto.RespuestaPostulanteResponse;
+import com.novarecruit.backend.entity.RespuestaPostulante;
+import com.novarecruit.backend.mapper.RespuestaPostulanteMapper;
+import com.novarecruit.backend.repository.RespuestaPostulanteRepository;
+
 @Service
 public class PostulacionService {
 
@@ -41,21 +49,32 @@ public class PostulacionService {
     private final PostulacionRepository postulacionRepository;
     private final VacanteRepository vacanteRepository;
     private final UsuarioRepository usuarioRepository;
-    private final ObjectMapper objectMapper;
+    private final RespuestaPostulanteRepository
+            respuestaPostulanteRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     public PostulacionService(
             PostulacionRepository postulacionRepository,
             VacanteRepository vacanteRepository,
             UsuarioRepository usuarioRepository,
-            ObjectMapper objectMapper,
+            RespuestaPostulanteRepository
+                    respuestaPostulanteRepository,
             SimpMessagingTemplate messagingTemplate) {
 
-        this.postulacionRepository = postulacionRepository;
-        this.vacanteRepository = vacanteRepository;
-        this.usuarioRepository = usuarioRepository;
-        this.objectMapper = objectMapper;
-        this.messagingTemplate = messagingTemplate;
+        this.postulacionRepository =
+                postulacionRepository;
+
+        this.vacanteRepository =
+                vacanteRepository;
+
+        this.usuarioRepository =
+                usuarioRepository;
+
+        this.respuestaPostulanteRepository =
+                respuestaPostulanteRepository;
+
+        this.messagingTemplate =
+                messagingTemplate;
     }
 
     /*
@@ -346,47 +365,40 @@ public class PostulacionService {
             String correoPostulante) {
 
         /*
-         * La consulta valida propiedad y bloquea temporalmente
-         * la postulación durante la calificación.
+         * Esta consulta mantiene el bloqueo pesimista
+         * implementado en el punto 2.4.
          */
-        Postulacion postulacion = postulacionRepository
-                .findByIdAndUsuario_Correo(
-                        postulacionId,
-                        correoPostulante
-                )
-                .orElseThrow(() -> {
+        Postulacion postulacion =
+                postulacionRepository
+                        .findByIdAndUsuario_Correo(
+                                postulacionId,
+                                correoPostulante
+                        )
+                        .orElseThrow(() -> {
 
-                    log.warn(
-                            "[SEGURIDAD] Intento de evaluar una "
-                                    + "postulación ajena o inexistente. "
-                                    + "correo={}, postulacionId={}",
-                            correoPostulante,
-                            postulacionId
-                    );
+                            log.warn(
+                                    "[SEGURIDAD] Intento de evaluar "
+                                            + "una postulación ajena. "
+                                            + "correo={}, postulacionId={}",
+                                    correoPostulante,
+                                    postulacionId
+                            );
 
-                    return new AccessDeniedException(
-                            "La postulación no pertenece "
-                                    + "al usuario autenticado"
-                    );
-                });
+                            return new AccessDeniedException(
+                                    "La postulación no pertenece "
+                                            + "al usuario autenticado"
+                            );
+                        });
 
-        log.info(
-                "[EVALUACION] Propiedad de postulación validada. "
-                        + "correo={}, postulacionId={}, vacanteId={}",
-                correoPostulante,
-                postulacion.getId(),
-                postulacion.getVacante().getId()
-        );
+        boolean existenRespuestasNormalizadas =
+                respuestaPostulanteRepository
+                        .existsByPostulacion_Id(
+                                postulacionId
+                        );
 
-        /*
-         * Una evaluación se considera enviada si existe cualquiera
-         * de estos indicadores.
-         *
-         * Esto también protege registros antiguos que pudieran
-         * tener uno de los campos incompletos.
-         */
         boolean yaFueEvaluada =
-                postulacion.getFechaEvaluacion() != null
+                existenRespuestasNormalizadas
+                        || postulacion.getFechaEvaluacion() != null
                         || postulacion.getPuntajeTecnico() != null
                         || (
                         postulacion.getRespuestasPostulante() != null
@@ -396,30 +408,34 @@ public class PostulacionService {
                 )
                         || "EVALUADO".equalsIgnoreCase(
                         postulacion.getEstado()
+                )
+                        || "CONTRATADO".equalsIgnoreCase(
+                        postulacion.getEstado()
+                )
+                        || "RECHAZADO".equalsIgnoreCase(
+                        postulacion.getEstado()
                 );
 
         if (yaFueEvaluada) {
 
             log.warn(
-                    "[SEGURIDAD] Segundo envío de evaluación rechazado. "
-                            + "correo={}, postulacionId={}, estado={}, "
-                            + "fechaEvaluacion={}, puntaje={}",
+                    "[SEGURIDAD] Segundo envío rechazado. "
+                            + "correo={}, postulacionId={}",
                     correoPostulante,
-                    postulacionId,
-                    postulacion.getEstado(),
-                    postulacion.getFechaEvaluacion(),
-                    postulacion.getPuntajeTecnico()
+                    postulacionId
             );
 
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "La evaluación ya fue enviada "
-                            + "y no puede volver a modificarse"
+                            + "y no puede modificarse"
             );
         }
 
         Evaluacion evaluacion =
-                postulacion.getVacante().getEvaluacion();
+                postulacion
+                        .getVacante()
+                        .getEvaluacion();
 
         if (evaluacion == null) {
             throw new ResponseStatusException(
@@ -429,7 +445,9 @@ public class PostulacionService {
         }
 
         List<Pregunta> preguntasOrdenadas =
-                new ArrayList<>(evaluacion.getPreguntas());
+                new ArrayList<>(
+                        evaluacion.getPreguntas()
+                );
 
         preguntasOrdenadas.sort(
                 Comparator.comparing(Pregunta::getId)
@@ -442,17 +460,76 @@ public class PostulacionService {
             );
         }
 
-        if (request == null
-                || request.respuestasPostulante() == null
-                || request.respuestasPostulante().isBlank()) {
-
+        if (
+                request == null
+                        || request.respuestas() == null
+                        || request.respuestas().isEmpty()
+        ) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Debe enviar las respuestas de la evaluación"
+                    "Debe responder todas las preguntas"
             );
         }
 
-        int puntajeTotal = 0;
+        Map<Long, String> respuestasPorPregunta =
+                new HashMap<>();
+
+        for (
+                RespuestaEvaluacionRequest respuesta
+                : request.respuestas()
+        ) {
+
+            if (
+                    respuesta == null
+                            || respuesta.preguntaId() == null
+                            || respuesta.respuesta() == null
+                            || respuesta.respuesta().isBlank()
+            ) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Todas las respuestas deben ser válidas"
+                );
+            }
+
+            String respuestaNormalizada =
+                    respuesta
+                            .respuesta()
+                            .trim()
+                            .toUpperCase();
+
+            String anterior =
+                    respuestasPorPregunta.putIfAbsent(
+                            respuesta.preguntaId(),
+                            respuestaNormalizada
+                    );
+
+            if (anterior != null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Una pregunta fue respondida más de una vez"
+                );
+            }
+        }
+
+        Set<Long> preguntasEsperadas =
+                new HashSet<>();
+
+        for (Pregunta pregunta : preguntasOrdenadas) {
+            preguntasEsperadas.add(
+                    pregunta.getId()
+            );
+        }
+
+        if (!respuestasPorPregunta
+                .keySet()
+                .equals(preguntasEsperadas)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debe responder todas las preguntas "
+                            + "de la evaluación"
+            );
+        }
 
         int puntajeBase =
                 PUNTAJE_MAXIMO_EXAMEN
@@ -462,103 +539,104 @@ public class PostulacionService {
                 PUNTAJE_MAXIMO_EXAMEN
                         % preguntasOrdenadas.size();
 
-        try {
-            JsonNode respuestasJson =
-                    objectMapper.readTree(
-                            request.respuestasPostulante()
+        int puntajeTotal = 0;
+
+        List<RespuestaPostulante> respuestasGuardar =
+                new ArrayList<>();
+
+        for (
+                int indice = 0;
+                indice < preguntasOrdenadas.size();
+                indice++
+        ) {
+
+            Pregunta pregunta =
+                    preguntasOrdenadas.get(indice);
+
+            String respuestaSeleccionada =
+                    respuestasPorPregunta.get(
+                            pregunta.getId()
                     );
 
-            if (!respuestasJson.isObject()) {
-                throw new IllegalArgumentException(
-                        "Las respuestas deben tener formato de objeto JSON"
-                );
-            }
-
-            log.info(
-                    "[EVALUACION] Procesando respuestas. "
-                            + "postulacionId={}, evaluacionId={}, "
-                            + "preguntas={}",
-                    postulacionId,
-                    evaluacion.getId(),
-                    preguntasOrdenadas.size()
+            validarAlternativa(
+                    pregunta,
+                    respuestaSeleccionada
             );
 
-            for (int indice = 0;
-                 indice < preguntasOrdenadas.size();
-                 indice++) {
+            int puntajeAsignado =
+                    puntajeBase
+                            + (
+                            indice < puntosRestantes
+                                    ? 1
+                                    : 0
+                    );
 
-                Pregunta pregunta =
-                        preguntasOrdenadas.get(indice);
+            boolean correcta =
+                    pregunta.getRespuestaCorrecta() != null
+                            && pregunta
+                            .getRespuestaCorrecta()
+                            .trim()
+                            .equalsIgnoreCase(
+                                    respuestaSeleccionada
+                            );
 
-                int puntajePregunta =
-                        puntajeBase
-                                + (
-                                indice < puntosRestantes
-                                        ? 1
-                                        : 0
-                        );
+            int puntajeObtenido =
+                    correcta
+                            ? puntajeAsignado
+                            : 0;
 
-                String idPregunta =
-                        String.valueOf(pregunta.getId());
+            puntajeTotal += puntajeObtenido;
 
-                if (!respuestasJson.has(idPregunta)) {
-                    continue;
-                }
+            RespuestaPostulante respuesta =
+                    new RespuestaPostulante();
 
-                String respuestaPostulante =
-                        respuestasJson
-                                .get(idPregunta)
-                                .asText()
-                                .trim();
+            respuesta.setPostulacion(postulacion);
+            respuesta.setPregunta(pregunta);
 
-                if (
-                        pregunta.getRespuestaCorrecta() != null
-                                && pregunta
-                                .getRespuestaCorrecta()
-                                .equalsIgnoreCase(
-                                        respuestaPostulante
-                                )
-                ) {
-                    puntajeTotal += puntajePregunta;
-                }
-            }
-
-        } catch (ResponseStatusException exception) {
-            throw exception;
-
-        } catch (Exception exception) {
-
-            log.warn(
-                    "[EVALUACION] Formato inválido de respuestas. "
-                            + "correo={}, postulacionId={}, error={}",
-                    correoPostulante,
-                    postulacionId,
-                    exception.getMessage()
+            respuesta.setRespuestaSeleccionada(
+                    respuestaSeleccionada
             );
 
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "El formato de las respuestas "
-                            + "del examen no es válido"
+            respuesta.setCorrecta(correcta);
+
+            respuesta.setPuntajeAsignado(
+                    puntajeAsignado
             );
+
+            respuesta.setPuntajeObtenido(
+                    puntajeObtenido
+            );
+
+            respuestasGuardar.add(respuesta);
         }
 
-        postulacion.setRespuestasPostulante(
-                request.respuestasPostulante()
+        /*
+         * Se guarda una fila por pregunta.
+         */
+        respuestaPostulanteRepository.saveAll(
+                respuestasGuardar
         );
 
+        /*
+         * La antigua columna permanece temporalmente,
+         * pero las nuevas evaluaciones ya no guardan JSON.
+         */
+        postulacion.setRespuestasPostulante(null);
         postulacion.setPuntajeTecnico(puntajeTotal);
         postulacion.setEstado("EVALUADO");
-        postulacion.setFechaEvaluacion(LocalDateTime.now());
+        postulacion.setFechaEvaluacion(
+                LocalDateTime.now()
+        );
 
         Postulacion guardada =
                 postulacionRepository.save(postulacion);
 
         log.info(
-                "[DB] Resultado de evaluación guardado en MySQL. "
-                        + "postulacionId={}, usuarioId={}, puntaje={}/20",
+                "[DB] Evaluación normalizada guardada. "
+                        + "postulacionId={}, respuestas={}, "
+                        + "puntaje={}/20",
                 guardada.getId(),
-                guardada.getUsuario().getId(),
+                respuestasGuardar.size(),
                 puntajeTotal
         );
 
@@ -576,19 +654,21 @@ public class PostulacionService {
                                 + guardada
                                 .getUsuario()
                                 .getNombres()
-                                + " ha completado la evaluación técnica "
-                                + "de la vacante '"
+                                + " completó la evaluación de '"
                                 + guardada
                                 .getVacante()
                                 .getTitulo()
-                                + "' con un puntaje de: "
+                                + "' con "
                                 + puntajeTotal
+                                + " / 20"
                 )
         );
 
         String canalPostulante =
                 "/topic/user/notificaciones/"
-                        + guardada.getUsuario().getId();
+                        + guardada
+                        .getUsuario()
+                        .getId();
 
         messagingTemplate.convertAndSend(
                 canalPostulante,
@@ -597,27 +677,94 @@ public class PostulacionService {
                         "EVALUACION_CALIFICADA",
 
                         "mensaje",
-                        "Tu evaluación técnica de la vacante '"
+                        "Tu evaluación de la vacante '"
                                 + guardada
                                 .getVacante()
                                 .getTitulo()
-                                + "' fue calificada con: "
+                                + "' fue calificada con "
                                 + puntajeTotal
                                 + " / 20"
                 )
         );
 
         log.info(
-                "[WS-SEND] Evento EVALUACION_CALIFICADA enviado. "
-                        + "postulacionId={}, puntaje={}, "
-                        + "canales=[{}, {}]",
+                "[WS-SEND] Evaluación notificada. "
+                        + "postulacionId={}, puntaje={}",
                 guardada.getId(),
-                puntajeTotal,
-                canalAdmin,
-                canalPostulante
+                puntajeTotal
         );
 
-        return PostulacionMapper.toResponse(guardada);
+        return PostulacionMapper.toResponse(
+                guardada
+        );
+    }
+
+
+    @Transactional(readOnly = true)
+    public List<RespuestaPostulanteResponse>
+    listarRespuestasAdmin(
+            Long postulacionId) {
+
+        postulacionRepository
+                .findById(postulacionId)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Postulación no encontrada"
+                        )
+                );
+
+        List<RespuestaPostulante> respuestas =
+                respuestaPostulanteRepository
+                        .findByPostulacion_IdOrderByPregunta_IdAsc(
+                                postulacionId
+                        );
+
+        List<RespuestaPostulanteResponse> resultado =
+                new ArrayList<>();
+
+        for (
+                int indice = 0;
+                indice < respuestas.size();
+                indice++
+        ) {
+            resultado.add(
+                    RespuestaPostulanteMapper.toResponse(
+                            respuestas.get(indice),
+                            indice + 1
+                    )
+            );
+        }
+
+        return resultado;
+    }
+
+    private void validarAlternativa(
+            Pregunta pregunta,
+            String respuesta) {
+
+        boolean verdaderoFalso =
+                "VERDADERO_FALSO".equalsIgnoreCase(
+                        pregunta.getTipoPregunta()
+                );
+
+        boolean valida =
+                verdaderoFalso
+                        ? "A".equals(respuesta)
+                        || "B".equals(respuesta)
+                        : "A".equals(respuesta)
+                        || "B".equals(respuesta)
+                        || "C".equals(respuesta)
+                        || "D".equals(respuesta);
+
+        if (!valida) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La respuesta de la pregunta "
+                            + pregunta.getId()
+                            + " no es válida"
+            );
+        }
     }
 
     /*
