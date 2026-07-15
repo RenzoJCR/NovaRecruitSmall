@@ -14,6 +14,7 @@ import {
   Radio,
   Search,
   FilterX,
+  X,
 } from "lucide-react";
 
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
@@ -73,6 +74,49 @@ function AdminPostulaciones() {
       setMessage("");
     }, 4050);
   };
+
+  const cerrarExpediente = () => {
+    setSelectedPostulacion(null);
+  };
+
+  /*
+   * Mientras el modal esté abierto se bloquea
+   * el desplazamiento de la página principal.
+   *
+   * También se permite cerrarlo con Escape.
+   */
+  useEffect(() => {
+    if (!selectedPostulacion) {
+      return undefined;
+    }
+
+    const cerrarConEscape = (event) => {
+      if (event.key === "Escape") {
+        cerrarExpediente();
+      }
+    };
+
+    const overflowAnterior =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
+
+    window.addEventListener(
+      "keydown",
+      cerrarConEscape
+    );
+
+    return () => {
+      document.body.style.overflow =
+        overflowAnterior;
+
+      window.removeEventListener(
+        "keydown",
+        cerrarConEscape
+      );
+    };
+  }, [selectedPostulacion]);
 
   const loadPostulaciones =
     useCallback(async () => {
@@ -388,7 +432,6 @@ function AdminPostulaciones() {
               </button>
             </div>
 
-            {/* FILTROS DENTRO DEL MISMO PIPELINE */}
             <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr_auto] gap-3">
               <div className="relative">
                 <Search
@@ -611,178 +654,6 @@ function AdminPostulaciones() {
               </div>
             </section>
           )}
-
-          {selectedPostulacion && (
-            <section className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl space-y-5 border border-slate-800 animate-fade-in">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 border-b border-slate-800 pb-3">
-                <div>
-                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider">
-                    Expediente de evaluación
-                    técnica
-                  </span>
-
-                  <h4 className="text-2xl font-black mt-0.5 tracking-tight">
-                    {
-                      selectedPostulacion.usuarioNombre
-                    }
-                  </h4>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedPostulacion(
-                      null
-                    )
-                  }
-                  className="text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
-                >
-                  Cerrar expediente
-                </button>
-              </div>
-
-              <div className="bg-slate-950 border border-white/5 rounded-2xl p-4">
-                <p className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-3">
-                  Datos del proceso
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  <p>
-                    <strong>Correo:</strong>{" "}
-                    {
-                      selectedPostulacion.usuarioCorreo
-                    }
-                  </p>
-
-                  <p>
-                    <strong>Puesto:</strong>{" "}
-                    {
-                      selectedPostulacion.vacanteTitulo
-                    }
-                  </p>
-
-                  <p>
-                    <strong>Área:</strong>{" "}
-                    {
-                      selectedPostulacion.vacanteAreaNombre
-                    }
-                  </p>
-
-                  <p>
-                    <strong>Estado:</strong>{" "}
-                    {
-                      selectedPostulacion.estado
-                    }
-                  </p>
-
-                  <p>
-                    <strong>
-                      Fecha de postulación:
-                    </strong>{" "}
-                    {new Date(
-                      selectedPostulacion.fechaPostulacion
-                    ).toLocaleString(
-                      "es-PE"
-                    )}
-                  </p>
-
-                  <p>
-                    <strong>
-                      Nota técnica:
-                    </strong>{" "}
-                    {selectedPostulacion.puntajeTecnico !==
-                    null
-                      ? `${selectedPostulacion.puntajeTecnico} / 20`
-                      : "Evaluación pendiente"}
-                  </p>
-                </div>
-              </div>
-
-              <RespuestasEvaluacion
-                postulacionId={
-                  selectedPostulacion.id
-                }
-                estado={
-                  selectedPostulacion.estado
-                }
-                puntajeTecnico={
-                  selectedPostulacion.puntajeTecnico
-                }
-              />
-
-              <div className="border-t border-slate-800 pt-4">
-                {selectedPostulacion.estado ===
-                "EVALUADO" ? (
-                  <div className="flex flex-wrap gap-2 justify-end">
-                    <span className="text-xs font-bold text-slate-400 flex items-center mr-auto">
-                      Decisión final:
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleUpdatePhase(
-                          selectedPostulacion.id,
-                          "RECHAZADO"
-                        )
-                      }
-                      disabled={
-                        updatingId !== null
-                      }
-                      className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
-                    >
-                      <XCircle size={14} />
-                      Rechazar candidato
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleUpdatePhase(
-                          selectedPostulacion.id,
-                          "CONTRATADO"
-                        )
-                      }
-                      disabled={
-                        updatingId !== null
-                      }
-                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
-                    >
-                      <CheckCircle
-                        size={14}
-                      />
-                      Confirmar contratación
-                    </button>
-                  </div>
-                ) : selectedPostulacion.estado ===
-                  "POSTULADO" ? (
-                  <p className="text-sm text-amber-300 font-semibold">
-                    El candidato todavía debe
-                    completar la evaluación
-                    técnica.
-                  </p>
-                ) : (
-                  <p className="text-sm text-slate-300 font-semibold">
-                    Proceso finalizado con
-                    estado:{" "}
-
-                    <span
-                      className={
-                        selectedPostulacion.estado ===
-                        "CONTRATADO"
-                          ? "text-emerald-400"
-                          : "text-rose-400"
-                      }
-                    >
-                      {
-                        selectedPostulacion.estado
-                      }
-                    </span>
-                  </p>
-                )}
-              </div>
-            </section>
-          )}
         </main>
 
         <aside>
@@ -855,6 +726,256 @@ function AdminPostulaciones() {
           </section>
         </aside>
       </div>
+
+      {/* MODAL DEL EXPEDIENTE */}
+      {selectedPostulacion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-700/35 backdrop-blur-sm p-3 sm:p-6 animate-fade-in"
+          onMouseDown={cerrarExpediente}
+          role="presentation"
+        >
+          <section
+            className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-slate-800 text-white rounded-3xl shadow-2xl border border-slate-600"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-expediente"
+          >
+            {/* CABECERA FIJA DEL MODAL */}
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 bg-slate-800/95 backdrop-blur-md border-b border-slate-700 px-5 sm:px-7 py-5 rounded-t-3xl">
+              <div>
+                <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider">
+                  Expediente de evaluación
+                  técnica
+                </span>
+
+                <h4
+                  id="titulo-expediente"
+                  className="text-xl sm:text-2xl font-black mt-1 tracking-tight"
+                >
+                  {
+                    selectedPostulacion.usuarioNombre
+                  }
+                </h4>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  {
+                    selectedPostulacion.vacanteTitulo
+                  }
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cerrarExpediente}
+                className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                aria-label="Cerrar expediente"
+                title="Cerrar expediente"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-7 space-y-6">
+              {/* DATOS DEL PROCESO */}
+              <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-5">
+                <p className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-4">
+                  Datos del proceso
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  <p>
+                    <strong className="text-slate-400">
+                      Candidato:
+                    </strong>{" "}
+                    {
+                      selectedPostulacion.usuarioNombre
+                    }
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Correo:
+                    </strong>{" "}
+                    {
+                      selectedPostulacion.usuarioCorreo
+                    }
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Puesto:
+                    </strong>{" "}
+                    {
+                      selectedPostulacion.vacanteTitulo
+                    }
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Área:
+                    </strong>{" "}
+                    {
+                      selectedPostulacion.vacanteAreaNombre
+                    }
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Estado:
+                    </strong>{" "}
+                    <span
+                      className={`inline-flex border px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${getBadgeStyles(
+                        selectedPostulacion.estado
+                      )}`}
+                    >
+                      {
+                        selectedPostulacion.estado
+                      }
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Fecha de postulación:
+                    </strong>{" "}
+                    {selectedPostulacion.fechaPostulacion
+                      ? new Date(
+                          selectedPostulacion.fechaPostulacion
+                        ).toLocaleString(
+                          "es-PE"
+                        )
+                      : "No disponible"}
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Nota técnica:
+                    </strong>{" "}
+                    {selectedPostulacion.puntajeTecnico !==
+                    null
+                      ? `${selectedPostulacion.puntajeTecnico} / 20`
+                      : "Evaluación pendiente"}
+                  </p>
+
+                  <p>
+                    <strong className="text-slate-400">
+                      Fecha de evaluación:
+                    </strong>{" "}
+                    {selectedPostulacion.fechaEvaluacion
+                      ? new Date(
+                          selectedPostulacion.fechaEvaluacion
+                        ).toLocaleString(
+                          "es-PE"
+                        )
+                      : "Todavía no evaluado"}
+                  </p>
+                </div>
+              </div>
+
+              {/* RESPUESTAS DEL EXAMEN */}
+              <RespuestasEvaluacion
+                postulacionId={
+                  selectedPostulacion.id
+                }
+                estado={
+                  selectedPostulacion.estado
+                }
+                puntajeTecnico={
+                  selectedPostulacion.puntajeTecnico
+                }
+              />
+
+              {/* DECISIÓN FINAL */}
+              <div className="border-t border-slate-800 pt-5">
+                {selectedPostulacion.estado ===
+                "EVALUADO" ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <span className="text-xs font-bold text-slate-400 sm:mr-auto">
+                      Decisión final del proceso:
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUpdatePhase(
+                          selectedPostulacion.id,
+                          "RECHAZADO"
+                        )
+                      }
+                      disabled={
+                        updatingId !== null
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <XCircle size={14} />
+
+                      {updatingId ===
+                      selectedPostulacion.id
+                        ? "Actualizando..."
+                        : "Rechazar candidato"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUpdatePhase(
+                          selectedPostulacion.id,
+                          "CONTRATADO"
+                        )
+                      }
+                      disabled={
+                        updatingId !== null
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <CheckCircle
+                        size={14}
+                      />
+
+                      {updatingId ===
+                      selectedPostulacion.id
+                        ? "Actualizando..."
+                        : "Confirmar contratación"}
+                    </button>
+                  </div>
+                ) : selectedPostulacion.estado ===
+                  "POSTULADO" ? (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                    <p className="text-sm text-amber-300 font-semibold">
+                      El candidato todavía debe
+                      completar la evaluación
+                      técnica.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
+                    <p className="text-sm text-slate-300 font-semibold">
+                      Proceso finalizado con
+                      estado:{" "}
+
+                      <span
+                        className={
+                          selectedPostulacion.estado ===
+                          "CONTRATADO"
+                            ? "text-emerald-400"
+                            : "text-rose-400"
+                        }
+                      >
+                        {
+                          selectedPostulacion.estado
+                        }
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
