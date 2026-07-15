@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -11,23 +12,18 @@ import {
   XCircle,
   Clock,
   Radio,
+  Search,
+  FilterX,
 } from "lucide-react";
 
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
-
-import {
-  postulacionService,
-} from "../../services/postulacionService.js";
-
-import {
-  useRealtimeNotifications,
-} from "../../context/realtimeContext.jsx";
+import { postulacionService } from "../../services/postulacionService.js";
+import { useRealtimeNotifications } from "../../context/realtimeContext.jsx";
 
 import RespuestasEvaluacion from
   "../../components/admin/RespuestasEvaluacion.jsx";
 
 function AdminPostulaciones() {
-  // ESTADOS DE CONTROL DEL PIPELINE.
   const [postulaciones, setPostulaciones] =
     useState([]);
 
@@ -45,18 +41,26 @@ function AdminPostulaciones() {
   const { ultimoEvento } =
     useRealtimeNotifications();
 
-  // ALERTAS DE PANTALLA.
   const [message, setMessage] =
     useState("");
 
   const [messageType, setMessageType] =
     useState("info");
 
-  // EVENTOS RECIBIDOS POR WEBSOCKET.
   const [
     websocketAlerts,
     setWebsocketAlerts,
   ] = useState([]);
+
+  // FILTROS DEL MISMO PIPELINE
+  const [busqueda, setBusqueda] =
+    useState("");
+
+  const [filtroVacante, setFiltroVacante] =
+    useState("TODAS");
+
+  const [filtroEstado, setFiltroEstado] =
+    useState("TODOS");
 
   const showMessage = (
     text,
@@ -70,7 +74,6 @@ function AdminPostulaciones() {
     }, 4050);
   };
 
-  // CARGA DE POSTULACIONES DESDE SPRING BOOT.
   const loadPostulaciones =
     useCallback(async () => {
       try {
@@ -102,7 +105,6 @@ function AdminPostulaciones() {
       }
     }, []);
 
-  // CARGA INICIAL DEL PIPELINE.
   useEffect(() => {
     const timer = setTimeout(() => {
       loadPostulaciones();
@@ -111,7 +113,6 @@ function AdminPostulaciones() {
     return () => clearTimeout(timer);
   }, [loadPostulaciones]);
 
-  // ACTUALIZACIÓN DEL PIPELINE MEDIANTE WEBSOCKET.
   useEffect(() => {
     if (!ultimoEvento?.tipo) {
       return;
@@ -150,7 +151,6 @@ function AdminPostulaciones() {
     loadPostulaciones,
   ]);
 
-  // CAMBIO DEL ESTADO FINAL DE LA POSTULACIÓN.
   const handleUpdatePhase = async (
     id,
     faseDestino
@@ -202,7 +202,6 @@ function AdminPostulaciones() {
     }
   };
 
-  // ESTILOS VISUALES POR ESTADO.
   const getBadgeStyles = (estado) => {
     switch (estado) {
       case "POSTULADO":
@@ -237,6 +236,107 @@ function AdminPostulaciones() {
     }
   };
 
+  const vacantesDisponibles =
+    useMemo(() => {
+      const vacantesUnicas = new Map();
+
+      postulaciones.forEach(
+        (postulacion) => {
+          if (
+            postulacion.vacanteId &&
+            postulacion.vacanteTitulo
+          ) {
+            vacantesUnicas.set(
+              String(
+                postulacion.vacanteId
+              ),
+              postulacion.vacanteTitulo
+            );
+          }
+        }
+      );
+
+      return Array.from(
+        vacantesUnicas.entries()
+      )
+        .map(([id, titulo]) => ({
+          id,
+          titulo,
+        }))
+        .sort((a, b) =>
+          a.titulo.localeCompare(
+            b.titulo,
+            "es"
+          )
+        );
+    }, [postulaciones]);
+
+  const postulacionesFiltradas =
+    useMemo(() => {
+      const texto =
+        busqueda
+          .trim()
+          .toLowerCase();
+
+      return postulaciones.filter(
+        (postulacion) => {
+          const coincideBusqueda =
+            texto === "" ||
+            (
+              postulacion.usuarioNombre ||
+              ""
+            )
+              .toLowerCase()
+              .includes(texto) ||
+            (
+              postulacion.usuarioCorreo ||
+              ""
+            )
+              .toLowerCase()
+              .includes(texto) ||
+            (
+              postulacion.vacanteTitulo ||
+              ""
+            )
+              .toLowerCase()
+              .includes(texto);
+
+          const coincideVacante =
+            filtroVacante === "TODAS" ||
+            String(
+              postulacion.vacanteId
+            ) === filtroVacante;
+
+          const coincideEstado =
+            filtroEstado === "TODOS" ||
+            postulacion.estado ===
+              filtroEstado;
+
+          return (
+            coincideBusqueda &&
+            coincideVacante &&
+            coincideEstado
+          );
+        }
+      );
+    }, [
+      postulaciones,
+      busqueda,
+      filtroVacante,
+      filtroEstado,
+    ]);
+
+  const filtrosActivos =
+    busqueda.trim() !== "" ||
+    filtroVacante !== "TODAS" ||
+    filtroEstado !== "TODOS";
+
+  const limpiarFiltros = () => {
+    setBusqueda("");
+    setFiltroVacante("TODAS");
+    setFiltroEstado("TODOS");
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -259,22 +359,122 @@ function AdminPostulaciones() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
-        {/* PANEL IZQUIERDO */}
         <main className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <p className="text-sm font-black text-slate-500 uppercase tracking-wider">
-              Postulaciones registradas en
-              MySQL
-            </p>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+              <div>
+                <p className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                  Postulaciones registradas
+                  en MySQL
+                </p>
 
-            <button
-              type="button"
-              onClick={loadPostulaciones}
-              className="inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-black cursor-pointer"
-            >
-              <RefreshCw size={16} />
-              Actualizar registros
-            </button>
+                <p className="text-xs text-slate-400 mt-1">
+                  Mostrando{" "}
+                  {
+                    postulacionesFiltradas.length
+                  }{" "}
+                  de {postulaciones.length}{" "}
+                  postulaciones
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadPostulaciones}
+                className="inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-black cursor-pointer"
+              >
+                <RefreshCw size={16} />
+                Actualizar registros
+              </button>
+            </div>
+
+            {/* FILTROS DENTRO DEL MISMO PIPELINE */}
+            <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr_auto] gap-3">
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={(event) =>
+                    setBusqueda(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Buscar por nombre, correo o vacante..."
+                  className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 outline-none focus:border-rose-500 text-sm"
+                />
+              </div>
+
+              <select
+                value={filtroVacante}
+                onChange={(event) =>
+                  setFiltroVacante(
+                    event.target.value
+                  )
+                }
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:border-rose-500 text-sm font-bold text-slate-700"
+              >
+                <option value="TODAS">
+                  Todas las vacantes
+                </option>
+
+                {vacantesDisponibles.map(
+                  (vacante) => (
+                    <option
+                      key={vacante.id}
+                      value={vacante.id}
+                    >
+                      {vacante.titulo}
+                    </option>
+                  )
+                )}
+              </select>
+
+              <select
+                value={filtroEstado}
+                onChange={(event) =>
+                  setFiltroEstado(
+                    event.target.value
+                  )
+                }
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:border-rose-500 text-sm font-bold text-slate-700"
+              >
+                <option value="TODOS">
+                  Todos los estados
+                </option>
+
+                <option value="POSTULADO">
+                  Postulado
+                </option>
+
+                <option value="EVALUADO">
+                  Evaluado
+                </option>
+
+                <option value="CONTRATADO">
+                  Contratado
+                </option>
+
+                <option value="RECHAZADO">
+                  Rechazado
+                </option>
+              </select>
+
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                disabled={!filtrosActivos}
+                title="Limpiar filtros"
+                className="inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 px-3 py-2.5 rounded-xl text-xs font-black cursor-pointer"
+              >
+                <FilterX size={16} />
+                Limpiar
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -287,6 +487,24 @@ function AdminPostulaciones() {
               Ningún desarrollador ha
               postulado todavía a las
               vacantes de NovaRecruit.
+            </div>
+          ) : postulacionesFiltradas.length ===
+            0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+              <Search
+                size={34}
+                className="mx-auto text-slate-300 mb-3"
+              />
+
+              <p className="font-black text-slate-600">
+                No se encontraron
+                postulaciones
+              </p>
+
+              <p className="text-sm text-slate-400 mt-1">
+                Cambia o limpia los filtros
+                utilizados.
+              </p>
             </div>
           ) : (
             <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
@@ -309,13 +527,12 @@ function AdminPostulaciones() {
               </div>
 
               <div className="divide-y divide-slate-100">
-                {postulaciones.map(
+                {postulacionesFiltradas.map(
                   (postulacion) => (
                     <div
                       key={postulacion.id}
                       className="grid grid-cols-1 lg:grid-cols-[1.5fr_1.5fr_1fr_auto] gap-3 lg:gap-4 px-5 py-4 items-center hover:bg-slate-50/40 transition-colors"
                     >
-                      {/* DATOS DEL POSTULANTE */}
                       <div>
                         <p className="font-black text-slate-900 tracking-tight">
                           {
@@ -330,7 +547,6 @@ function AdminPostulaciones() {
                         </span>
                       </div>
 
-                      {/* VACANTE Y ESTADO */}
                       <div>
                         <p className="text-sm font-bold text-slate-800 leading-tight">
                           {
@@ -349,7 +565,6 @@ function AdminPostulaciones() {
                         </span>
                       </div>
 
-                      {/* NOTA TÉCNICA */}
                       <div>
                         {postulacion.puntajeTecnico !==
                         null ? (
@@ -367,9 +582,7 @@ function AdminPostulaciones() {
                           </div>
                         ) : (
                           <div className="inline-flex items-center gap-1.5 text-slate-400 text-xs font-bold">
-                            <Clock
-                              size={14}
-                            />
+                            <Clock size={14} />
 
                             <span>
                               Examen pendiente
@@ -378,7 +591,6 @@ function AdminPostulaciones() {
                         )}
                       </div>
 
-                      {/* ABRIR EXPEDIENTE */}
                       <div className="text-right">
                         <button
                           type="button"
@@ -389,10 +601,7 @@ function AdminPostulaciones() {
                           }
                           className="inline-flex items-center gap-1.5 border border-slate-300 hover:border-rose-300 hover:text-rose-600 text-slate-700 text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer"
                         >
-                          <FileText
-                            size={14}
-                          />
-
+                          <FileText size={14} />
                           Revisar expediente
                         </button>
                       </div>
@@ -403,7 +612,6 @@ function AdminPostulaciones() {
             </section>
           )}
 
-          {/* EXPEDIENTE DEL CANDIDATO */}
           {selectedPostulacion && (
             <section className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl space-y-5 border border-slate-800 animate-fade-in">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 border-b border-slate-800 pb-3">
@@ -433,7 +641,6 @@ function AdminPostulaciones() {
                 </button>
               </div>
 
-              {/* DATOS GENERALES */}
               <div className="bg-slate-950 border border-white/5 rounded-2xl p-4">
                 <p className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-3">
                   Datos del proceso
@@ -441,36 +648,28 @@ function AdminPostulaciones() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   <p>
-                    <strong>
-                      Correo:
-                    </strong>{" "}
+                    <strong>Correo:</strong>{" "}
                     {
                       selectedPostulacion.usuarioCorreo
                     }
                   </p>
 
                   <p>
-                    <strong>
-                      Puesto:
-                    </strong>{" "}
+                    <strong>Puesto:</strong>{" "}
                     {
                       selectedPostulacion.vacanteTitulo
                     }
                   </p>
 
                   <p>
-                    <strong>
-                      Área:
-                    </strong>{" "}
+                    <strong>Área:</strong>{" "}
                     {
                       selectedPostulacion.vacanteAreaNombre
                     }
                   </p>
 
                   <p>
-                    <strong>
-                      Estado:
-                    </strong>{" "}
+                    <strong>Estado:</strong>{" "}
                     {
                       selectedPostulacion.estado
                     }
@@ -499,7 +698,6 @@ function AdminPostulaciones() {
                 </div>
               </div>
 
-              {/* RESPUESTAS NORMALIZADAS */}
               <RespuestasEvaluacion
                 postulacionId={
                   selectedPostulacion.id
@@ -512,7 +710,6 @@ function AdminPostulaciones() {
                 }
               />
 
-              {/* DECISIÓN FINAL */}
               <div className="border-t border-slate-800 pt-4">
                 {selectedPostulacion.estado ===
                 "EVALUADO" ? (
@@ -534,10 +731,7 @@ function AdminPostulaciones() {
                       }
                       className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer transition-colors"
                     >
-                      <XCircle
-                        size={14}
-                      />
-
+                      <XCircle size={14} />
                       Rechazar candidato
                     </button>
 
@@ -557,7 +751,6 @@ function AdminPostulaciones() {
                       <CheckCircle
                         size={14}
                       />
-
                       Confirmar contratación
                     </button>
                   </div>
@@ -592,7 +785,6 @@ function AdminPostulaciones() {
           )}
         </main>
 
-        {/* CONSOLA WEBSOCKET */}
         <aside>
           <section className="bg-slate-950 border border-slate-800 text-slate-200 rounded-2xl p-4 shadow-md sticky top-6 space-y-4">
             <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
