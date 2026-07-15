@@ -47,6 +47,11 @@ public class VacanteService {
                 usuarioRepository;
     }
 
+    /*
+     * Crear vacante.
+     *
+     * Solo permite utilizar áreas activas.
+     */
     @Transactional
     public VacanteResponse crearVacante(
             VacanteRequest request,
@@ -61,15 +66,6 @@ public class VacanteService {
                         )
                 );
 
-        /*
-         * Regla de negocio:
-         *
-         * Una nueva vacante solamente puede
-         * asociarse a un área activa.
-         *
-         * Las vacantes antiguas conservan su área
-         * aunque posteriormente sea desactivada.
-         */
         if (!Boolean.TRUE.equals(
                 area.getActivo()
         )) {
@@ -106,11 +102,11 @@ public class VacanteService {
         );
 
         vacante.setTitulo(
-                request.titulo()
+                request.titulo().trim()
         );
 
         vacante.setDescripcion(
-                request.descripcion()
+                request.descripcion().trim()
         );
 
         vacante.setModalidad(
@@ -144,6 +140,131 @@ public class VacanteService {
 
         return VacanteMapper.toResponse(
                 guardada
+        );
+    }
+
+    /*
+     * Editar vacante.
+     *
+     * Campos permitidos:
+     * - área
+     * - título
+     * - descripción
+     * - modalidad
+     * - salario
+     *
+     * No modifica:
+     * - administrador
+     * - creadoPor
+     * - fechaCreacion
+     * - estado
+     * - evaluación
+     * - postulaciones
+     */
+    @Transactional
+    public VacanteResponse actualizarVacante(
+            Long vacanteId,
+            VacanteRequest request,
+            String operador
+    ) {
+        Vacante vacante =
+                vacanteRepository
+                        .findById(vacanteId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Vacante no encontrada"
+                                )
+                        );
+
+        Area areaSolicitada =
+                areaRepository
+                        .findById(request.areaId())
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "El área tecnológica no fue encontrada"
+                                )
+                        );
+
+        /*
+         * Se permite conservar el área actual aunque
+         * posteriormente haya sido desactivada.
+         *
+         * Sin embargo, para cambiar hacia otra área,
+         * esa nueva área obligatoriamente debe estar activa.
+         */
+        boolean conservaMismaArea =
+                vacante.getArea()
+                        .getId()
+                        .equals(
+                                areaSolicitada.getId()
+                        );
+
+        if (
+                !conservaMismaArea &&
+                        !Boolean.TRUE.equals(
+                                areaSolicitada.getActivo()
+                        )
+        ) {
+            log.warn(
+                    "[VACANTE] Intento de cambiar una vacante "
+                            + "hacia un área inactiva. "
+                            + "vacanteId={}, areaId={}, operador={}",
+                    vacanteId,
+                    areaSolicitada.getId(),
+                    operador
+            );
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No se puede trasladar la vacante hacia un área inactiva."
+            );
+        }
+
+        vacante.setArea(
+                areaSolicitada
+        );
+
+        vacante.setTitulo(
+                request.titulo().trim()
+        );
+
+        vacante.setDescripcion(
+                request.descripcion().trim()
+        );
+
+        vacante.setModalidad(
+                request.modalidad()
+                        .toUpperCase()
+                        .trim()
+        );
+
+        vacante.setSalario(
+                request.salario()
+        );
+
+        vacante.setModificadoPor(
+                operador
+        );
+
+        Vacante actualizada =
+                vacanteRepository.save(
+                        vacante
+                );
+
+        log.info(
+                "[DB] Vacante actualizada en MySQL. "
+                        + "vacanteId={}, titulo='{}', "
+                        + "areaId={}, operador={}",
+                actualizada.getId(),
+                actualizada.getTitulo(),
+                actualizada.getArea().getId(),
+                operador
+        );
+
+        return VacanteMapper.toResponse(
+                actualizada
         );
     }
 

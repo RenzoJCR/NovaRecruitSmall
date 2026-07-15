@@ -1,41 +1,80 @@
 import api from "./api";
 
 export const vacanteService = {
-  // Público y postulantes: solo vacantes activas.
+  // Público y postulantes:
+  // solamente vacantes activas.
   listarTodas: async () => {
-    const response = await api.get("/vacantes");
+    const response =
+      await api.get("/vacantes");
+
     return response.data;
   },
 
-  // Administrador: vacantes activas y cerradas.
+  // Administrador:
+  // vacantes activas y cerradas.
   listarAdmin: async () => {
-    const response = await api.get("/vacantes/admin");
+    const response =
+      await api.get(
+        "/vacantes/admin"
+      );
+
     return response.data;
   },
 
-  // Público: detalle de una vacante activa.
+  // Público:
+  // detalle de una vacante activa.
   obtenerPorId: async (id) => {
-    const response = await api.get(`/vacantes/${id}`);
+    const response =
+      await api.get(
+        `/vacantes/${id}`
+      );
+
     return response.data;
   },
 
-  // Administrador: crear vacante.
+  // Administrador:
+  // crear vacante.
   crear: async (payload) => {
-    const response = await api.post("/vacantes", payload);
+    const response =
+      await api.post(
+        "/vacantes",
+        payload
+      );
+
     return response.data;
   },
 
-  // Administrador: activar o cerrar vacante.
-  cambiarEstado: async (id, nuevoEstado) => {
-    const response = await api.patch(
-      `/vacantes/${id}/estado`,
-      null,
-      {
-        params: {
-          nuevoEstado,
-        },
-      }
-    );
+  // Administrador:
+  // editar vacante.
+  actualizar: async (
+    id,
+    payload
+  ) => {
+    const response =
+      await api.put(
+        `/vacantes/${id}`,
+        payload
+      );
+
+    return response.data;
+  },
+
+  // Administrador:
+  // activar o cerrar vacante.
+  cambiarEstado: async (
+    id,
+    nuevoEstado
+  ) => {
+    const response =
+      await api.patch(
+        `/vacantes/${id}/estado`,
+        null,
+        {
+          params: {
+            nuevoEstado,
+          },
+        }
+      );
 
     return response.data;
   },

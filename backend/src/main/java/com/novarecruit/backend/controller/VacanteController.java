@@ -3,13 +3,25 @@ package com.novarecruit.backend.controller;
 import com.novarecruit.backend.dto.VacanteRequest;
 import com.novarecruit.backend.dto.VacanteResponse;
 import com.novarecruit.backend.service.VacanteService;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -18,14 +30,17 @@ import java.util.List;
 public class VacanteController {
 
     private static final Logger log =
-            LoggerFactory.getLogger(VacanteController.class);
+            LoggerFactory.getLogger(
+                    VacanteController.class
+            );
 
     private final VacanteService vacanteService;
 
     public VacanteController(
-            VacanteService vacanteService) {
-
-        this.vacanteService = vacanteService;
+            VacanteService vacanteService
+    ) {
+        this.vacanteService =
+                vacanteService;
     }
 
     /*
@@ -55,8 +70,8 @@ public class VacanteController {
     public ResponseEntity<List<VacanteResponse>>
     listarTodasAdmin(
             @AuthenticationPrincipal
-            String correoAdministrador) {
-
+            String correoAdministrador
+    ) {
         log.info(
                 "[VACANTE] Administrador solicita "
                         + "el catálogo completo. correo={}",
@@ -75,8 +90,8 @@ public class VacanteController {
     @GetMapping("/{id}")
     public ResponseEntity<VacanteResponse>
     obtenerActivaPorId(
-            @PathVariable Long id) {
-
+            @PathVariable Long id
+    ) {
         log.info(
                 "[VACANTE] Consultando detalle público. "
                         + "vacanteId={}",
@@ -84,18 +99,23 @@ public class VacanteController {
         );
 
         return ResponseEntity.ok(
-                vacanteService.obtenerActivaPorId(id)
+                vacanteService
+                        .obtenerActivaPorId(id)
         );
     }
 
+    /*
+     * Administrador:
+     * crea una vacante.
+     */
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PostMapping
     public ResponseEntity<VacanteResponse>
     crearVacante(
             @RequestBody VacanteRequest request,
             @AuthenticationPrincipal
-            String correoOperador) {
-
+            String correoOperador
+    ) {
         log.info(
                 "[VACANTE] Administrador inicia "
                         + "registro de vacante. "
@@ -115,6 +135,42 @@ public class VacanteController {
                 .body(response);
     }
 
+    /*
+     * Administrador:
+     * actualiza área, título, descripción,
+     * modalidad y salario.
+     */
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    @PutMapping("/{id}")
+    public ResponseEntity<VacanteResponse>
+    actualizarVacante(
+            @PathVariable Long id,
+            @RequestBody VacanteRequest request,
+            @AuthenticationPrincipal
+            String correoOperador
+    ) {
+        log.info(
+                "[VACANTE] Administrador solicita "
+                        + "actualización de vacante. "
+                        + "correo={}, vacanteId={}",
+                correoOperador,
+                id
+        );
+
+        return ResponseEntity.ok(
+                vacanteService
+                        .actualizarVacante(
+                                id,
+                                request,
+                                correoOperador
+                        )
+        );
+    }
+
+    /*
+     * Administrador:
+     * activa o pausa la vacante.
+     */
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PatchMapping("/{id}/estado")
     public ResponseEntity<VacanteResponse>
@@ -122,8 +178,8 @@ public class VacanteController {
             @PathVariable Long id,
             @RequestParam String nuevoEstado,
             @AuthenticationPrincipal
-            String correoOperador) {
-
+            String correoOperador
+    ) {
         log.info(
                 "[VACANTE] Administrador solicita "
                         + "cambio de estado. "

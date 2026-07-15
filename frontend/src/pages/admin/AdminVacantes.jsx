@@ -15,6 +15,8 @@ import {
   Eye,
   Search,
   FilterX,
+  Pencil,
+  X,
 } from "lucide-react";
 
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
@@ -56,6 +58,9 @@ function AdminVacantes() {
   const [loading, setLoading] =
     useState(true);
 
+  const [savingVacante, setSavingVacante] =
+    useState(false);
+
   const [message, setMessage] =
     useState("");
 
@@ -64,6 +69,11 @@ function AdminVacantes() {
 
   const [vacanteForm, setVacanteForm] =
     useState(initialVacanteForm);
+
+  const [
+    editingVacanteId,
+    setEditingVacanteId,
+  ] = useState(null);
 
   const [examForm, setExamForm] =
     useState(initialExamForm);
@@ -116,9 +126,11 @@ function AdminVacantes() {
 
     return (
       puntajeEnteroBase +
-      (indice < puntosRestantes
-        ? 1
-        : 0)
+      (
+        indice < puntosRestantes
+          ? 1
+          : 0
+      )
     );
   };
 
@@ -147,8 +159,13 @@ function AdminVacantes() {
       try {
         setLoading(true);
 
-        const [vacantesData, areasData] = await Promise.all([
-          vacanteService.listarAdmin(),
+        const [
+          vacantesData,
+          areasData,
+        ] = await Promise.all([
+          vacanteService
+            .listarAdmin(),
+
           areaService.getActive(),
         ]);
 
@@ -189,11 +206,78 @@ function AdminVacantes() {
     loadData();
   }, [loadData]);
 
+  const vacanteEnEdicion =
+    useMemo(() => {
+      if (
+        editingVacanteId === null
+      ) {
+        return null;
+      }
+
+      return (
+        vacantes.find(
+          (vacante) =>
+            vacante.id ===
+            editingVacanteId
+        ) || null
+      );
+    }, [
+      vacantes,
+      editingVacanteId,
+    ]);
+
+  /*
+   * Normalmente el selector solo recibe
+   * áreas activas.
+   *
+   * Si una vacante ya pertenece a un área
+   * que luego fue desactivada, se agrega
+   * temporalmente su área actual para que
+   * pueda conservarla al editar otros datos.
+   */
+  const areasFormulario =
+    useMemo(() => {
+      if (!vacanteEnEdicion) {
+        return areas;
+      }
+
+      const areaActualIncluida =
+        areas.some(
+          (area) =>
+            Number(area.id) ===
+            Number(
+              vacanteEnEdicion.areaId
+            )
+        );
+
+      if (areaActualIncluida) {
+        return areas;
+      }
+
+      return [
+        {
+          id:
+            vacanteEnEdicion.areaId,
+
+          nombre:
+            `${vacanteEnEdicion.areaNombre} (área actual inactiva)`,
+
+          activo: false,
+        },
+        ...areas,
+      ];
+    }, [
+      areas,
+      vacanteEnEdicion,
+    ]);
+
   const handleVacanteChange = (
     event
   ) => {
-    const { name, value } =
-      event.target;
+    const {
+      name,
+      value,
+    } = event.target;
 
     setVacanteForm((prev) => ({
       ...prev,
@@ -201,94 +285,192 @@ function AdminVacantes() {
     }));
   };
 
-  const handleCreateVacante = async (e) => {
-    e.preventDefault();
-
-    if (
-      !vacanteForm.areaId ||
-      !vacanteForm.titulo.trim() ||
-      !vacanteForm.descripcion.trim()
-    ) {
-      showMessage(
-        "Por favor, completa todos los campos obligatorios.",
-        "error"
-      );
-
-      return;
-    }
-
-    /*
-    * Comprobación adicional en el frontend:
-    * el área seleccionada debe continuar dentro
-    * del listado de áreas activas.
-    */
-    const areaSeleccionada = areas.find(
-      (area) =>
-        Number(area.id) ===
-        Number(vacanteForm.areaId)
+  const iniciarEdicionVacante = (
+    vacante
+  ) => {
+    setEditingVacanteId(
+      vacante.id
     );
 
-    if (!areaSeleccionada) {
-      showMessage(
-        "El área seleccionada ya no está activa. Actualiza el formulario y selecciona otra área.",
-        "error"
-      );
-
-      setVacanteForm((prev) => ({
-        ...prev,
-        areaId: "",
-      }));
-
-      await loadData();
-      return;
-    }
-
-    const payload = {
-      areaId: Number(
-        vacanteForm.areaId
-      ),
+    setVacanteForm({
+      areaId:
+        String(vacante.areaId),
 
       titulo:
-        vacanteForm.titulo.trim(),
+        vacante.titulo || "",
 
       descripcion:
-        vacanteForm.descripcion.trim(),
+        vacante.descripcion || "",
 
       modalidad:
-        vacanteForm.modalidad,
+        vacante.modalidad ||
+        "REMOTO",
 
       salario:
-        vacanteForm.salario
-          ? Number(
-              vacanteForm.salario
-            )
-          : null,
-    };
+        vacante.salario ?? "",
+    });
 
-    try {
-      await vacanteService.crear(
-        payload
-      );
+    setMessage("");
 
-      showMessage(
-        "Oferta laboral publicada con éxito en el portal.",
-        "success"
-      );
+    setTimeout(() => {
+      document
+        .getElementById(
+          "vacante-form-panel"
+        )
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 0);
+  };
+
+  const cancelarEdicionVacante =
+    () => {
+      setEditingVacanteId(null);
 
       setVacanteForm(
         initialVacanteForm
       );
+    };
 
-      await loadData();
-    } catch (error) {
-      showMessage(
-        error.userMessage ||
-          error.response?.data?.message ||
-          "No se pudo publicar la vacante.",
-        "error"
-      );
-    }
-  };
+  const handleSubmitVacante =
+    async (event) => {
+      event.preventDefault();
+
+      if (
+        !vacanteForm.areaId ||
+        !vacanteForm.titulo.trim() ||
+        !vacanteForm.descripcion.trim()
+      ) {
+        showMessage(
+          "Por favor, completa todos los campos obligatorios.",
+          "error"
+        );
+
+        return;
+      }
+
+      const areaActivaSeleccionada =
+        areas.find(
+          (area) =>
+            Number(area.id) ===
+            Number(
+              vacanteForm.areaId
+            )
+        );
+
+      const conservaAreaActual =
+        vacanteEnEdicion &&
+        Number(
+          vacanteEnEdicion.areaId
+        ) ===
+          Number(
+            vacanteForm.areaId
+          );
+
+      /*
+       * En creación siempre debe ser un área activa.
+       *
+       * En edición se permite conservar el área
+       * actual aunque haya sido desactivada.
+       */
+      if (
+        !areaActivaSeleccionada &&
+        !conservaAreaActual
+      ) {
+        showMessage(
+          "El área seleccionada ya no está activa. Actualiza el formulario y selecciona otra área.",
+          "error"
+        );
+
+        if (
+          editingVacanteId === null
+        ) {
+          setVacanteForm(
+            (prev) => ({
+              ...prev,
+              areaId: "",
+            })
+          );
+        }
+
+        await loadData();
+        return;
+      }
+
+      const payload = {
+        areaId: Number(
+          vacanteForm.areaId
+        ),
+
+        titulo:
+          vacanteForm.titulo.trim(),
+
+        descripcion:
+          vacanteForm.descripcion
+            .trim(),
+
+        modalidad:
+          vacanteForm.modalidad,
+
+        salario:
+          vacanteForm.salario
+            ? Number(
+                vacanteForm.salario
+              )
+            : null,
+      };
+
+      try {
+        setSavingVacante(true);
+
+        if (
+          editingVacanteId !== null
+        ) {
+          await vacanteService
+            .actualizar(
+              editingVacanteId,
+              payload
+            );
+
+          showMessage(
+            "La vacante fue actualizada correctamente.",
+            "success"
+          );
+        } else {
+          await vacanteService.crear(
+            payload
+          );
+
+          showMessage(
+            "Oferta laboral publicada con éxito en el portal.",
+            "success"
+          );
+        }
+
+        setEditingVacanteId(null);
+
+        setVacanteForm(
+          initialVacanteForm
+        );
+
+        await loadData();
+      } catch (error) {
+        showMessage(
+          error.userMessage ||
+            error.response?.data
+              ?.message ||
+            (
+              editingVacanteId !== null
+                ? "No se pudo actualizar la vacante."
+                : "No se pudo publicar la vacante."
+            ),
+          "error"
+        );
+      } finally {
+        setSavingVacante(false);
+      }
+    };
 
   const handleToggleEstado = async (
     vacanteId,
@@ -422,11 +604,14 @@ function AdminVacantes() {
       vacanteId: Number(
         selectedVacante.id
       ),
+
       titulo:
         examForm.titulo.trim(),
+
       descripcion:
-        examForm.descripcion.trim() ||
-        null,
+        examForm.descripcion
+          .trim() || null,
+
       preguntas:
         examForm.preguntas,
     };
@@ -442,7 +627,11 @@ function AdminVacantes() {
       );
 
       setShowExamModal(false);
-      setExamForm(initialExamForm);
+
+      setExamForm(
+        initialExamForm
+      );
+
       setSelectedVacante(null);
 
       await loadData();
@@ -538,13 +727,22 @@ function AdminVacantes() {
 
   const limpiarFiltros = () => {
     setBusquedaVacante("");
+
     setFiltroEstadoVacante(
       "TODAS"
     );
   };
 
   const noHayAreasActivas =
-    !loading && areas.length === 0;
+    !loading &&
+    areas.length === 0;
+
+  const formularioBloqueado =
+    loading ||
+    (
+      noHayAreasActivas &&
+      editingVacanteId === null
+    );
 
   return (
     <div className="space-y-6">
@@ -596,7 +794,6 @@ function AdminVacantes() {
               </button>
             </div>
 
-            {/* FILTROS DE LA MISMA VISTA */}
             <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3">
               <div className="relative">
                 <Search
@@ -645,8 +842,12 @@ function AdminVacantes() {
 
               <button
                 type="button"
-                onClick={limpiarFiltros}
-                disabled={!filtrosActivos}
+                onClick={
+                  limpiarFiltros
+                }
+                disabled={
+                  !filtrosActivos
+                }
                 className="inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 px-3 py-2.5 rounded-xl text-xs font-black cursor-pointer"
               >
                 <FilterX size={16} />
@@ -690,7 +891,12 @@ function AdminVacantes() {
                 (vacante) => (
                   <div
                     key={vacante.id}
-                    className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-rose-300 transition-all grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center"
+                    className={`bg-white border rounded-2xl p-5 shadow-sm transition-all grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center ${
+                      editingVacanteId ===
+                      vacante.id
+                        ? "border-rose-400 ring-2 ring-rose-100"
+                        : "border-slate-200 hover:border-rose-300"
+                    }`}
                   >
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -712,6 +918,13 @@ function AdminVacantes() {
                             vacante.estado
                           )}
                         </span>
+
+                        {editingVacanteId ===
+                          vacante.id && (
+                          <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                            En edición
+                          </span>
+                        )}
                       </div>
 
                       <h3 className="text-xl font-black text-slate-900 mt-2 tracking-tight">
@@ -754,7 +967,7 @@ function AdminVacantes() {
                               vacante.id
                             )
                           }
-                          className="inline-flex items-center gap-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
                         >
                           <Eye size={14} />
                           Ver preguntas
@@ -771,7 +984,7 @@ function AdminVacantes() {
                               true
                             );
                           }}
-                          className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer"
                         >
                           <ClipboardCheck
                             size={14}
@@ -779,6 +992,22 @@ function AdminVacantes() {
                           Configurar examen
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          iniciarEdicionVacante(
+                            vacante
+                          )
+                        }
+                        disabled={
+                          savingVacante
+                        }
+                        className="inline-flex items-center justify-center gap-1.5 border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-black px-3 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Pencil size={14} />
+                        Editar vacante
+                      </button>
 
                       <button
                         type="button"
@@ -836,7 +1065,10 @@ function AdminVacantes() {
                 {viewingExam.preguntas
                   ?.length > 0 ? (
                   viewingExam.preguntas.map(
-                    (pregunta, index) => (
+                    (
+                      pregunta,
+                      index
+                    ) => (
                       <div
                         key={
                           pregunta.id ||
@@ -918,26 +1150,69 @@ function AdminVacantes() {
           )}
         </main>
 
-        <aside>
+        <aside id="vacante-form-panel">
           <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm sticky top-6">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <Briefcase
-                className="text-rose-600"
-                size={20}
-              />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  {editingVacanteId !==
+                  null ? (
+                    <Pencil
+                      className="text-sky-600"
+                      size={20}
+                    />
+                  ) : (
+                    <Briefcase
+                      className="text-rose-600"
+                      size={20}
+                    />
+                  )}
 
-              Nueva vacante
-            </h2>
+                  {editingVacanteId !==
+                  null
+                    ? "Editar vacante"
+                    : "Nueva vacante"}
+                </h2>
 
-            <p className="text-sm text-slate-500 mt-1 mb-5">
-              Publica una nueva plaza en
-              el portal público de
-              reclutamiento.
-            </p>
+                <p className="text-sm text-slate-500 mt-1 mb-5">
+                  {editingVacanteId !==
+                  null
+                    ? "Modifica el área, título, descripción, modalidad o salario."
+                    : "Publica una nueva plaza en el portal público de reclutamiento."}
+                </p>
+              </div>
+
+              {editingVacanteId !==
+                null && (
+                <button
+                  type="button"
+                  onClick={
+                    cancelarEdicionVacante
+                  }
+                  disabled={
+                    savingVacante
+                  }
+                  title="Cancelar edición"
+                  className="inline-flex items-center justify-center w-9 h-9 border border-slate-300 hover:bg-slate-50 text-slate-500 rounded-xl cursor-pointer disabled:opacity-50"
+                >
+                  <X size={17} />
+                </button>
+              )}
+            </div>
+
+            {editingVacanteId !==
+              null && (
+              <div className="mb-4 px-3 py-2 bg-sky-50 border border-sky-200 rounded-xl text-xs font-bold text-sky-700">
+                Editando la vacante con ID{" "}
+                {editingVacanteId}. El estado
+                de publicación no será
+                modificado.
+              </div>
+            )}
 
             <form
               onSubmit={
-                handleCreateVacante
+                handleSubmitVacante
               }
               className="space-y-4"
             >
@@ -948,11 +1223,14 @@ function AdminVacantes() {
 
                 <select
                   name="areaId"
-                  value={vacanteForm.areaId}
-                  onChange={handleVacanteChange}
+                  value={
+                    vacanteForm.areaId
+                  }
+                  onChange={
+                    handleVacanteChange
+                  }
                   disabled={
-                    loading ||
-                    noHayAreasActivas
+                    formularioBloqueado
                   }
                   className="w-full border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:border-rose-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-sm font-bold text-slate-800"
                   required
@@ -960,28 +1238,52 @@ function AdminVacantes() {
                   <option value="">
                     {loading
                       ? "Cargando áreas activas..."
-                      : noHayAreasActivas
+                      : noHayAreasActivas &&
+                          editingVacanteId ===
+                            null
                         ? "No existen áreas activas"
-                        : "-- Selecciona un área activa --"}
+                        : "-- Selecciona un área --"}
                   </option>
 
-                  {areas.map((area) => (
-                    <option
-                      key={area.id}
-                      value={area.id}
-                    >
-                      {area.nombre}
-                    </option>
-                  ))}
+                  {areasFormulario.map(
+                    (area) => (
+                      <option
+                        key={area.id}
+                        value={area.id}
+                      >
+                        {area.nombre}
+                      </option>
+                    )
+                  )}
                 </select>
 
-                {noHayAreasActivas ? (
+                {noHayAreasActivas &&
+                editingVacanteId ===
+                  null ? (
                   <p className="text-[11px] text-rose-600 font-semibold mt-2">
-                    No puedes publicar vacantes porque no existen áreas activas. Activa o registra un área tecnológica primero.
+                    No puedes publicar
+                    vacantes porque no
+                    existen áreas activas.
+                  </p>
+                ) : vacanteEnEdicion &&
+                  !areas.some(
+                    (area) =>
+                      Number(area.id) ===
+                      Number(
+                        vacanteEnEdicion.areaId
+                      )
+                  ) ? (
+                  <p className="text-[11px] text-amber-600 font-semibold mt-2">
+                    El área actual está
+                    inactiva. Puedes
+                    conservarla o cambiarla
+                    por otra área activa.
                   </p>
                 ) : (
                   <p className="text-[10px] text-slate-400 mt-1">
-                    Solo se muestran áreas tecnológicas activas.
+                    Para cambiar de área
+                    solamente se muestran
+                    áreas activas.
                   </p>
                 )}
               </div>
@@ -1001,6 +1303,7 @@ function AdminVacantes() {
                     handleVacanteChange
                   }
                   placeholder="Ej: Fullstack Developer Spring/React"
+                  maxLength={150}
                   className="input-light text-sm"
                   required
                 />
@@ -1063,6 +1366,8 @@ function AdminVacantes() {
                   <input
                     name="salario"
                     type="number"
+                    min="0"
+                    step="0.01"
                     value={
                       vacanteForm.salario
                     }
@@ -1075,20 +1380,50 @@ function AdminVacantes() {
                 </div>
               </div>
 
-                <button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    noHayAreasActivas
-                  }
-                  className="w-full inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-black shadow-md cursor-pointer transition-all"
-                >
-                  <Save size={16} />
+              <button
+                type="submit"
+                disabled={
+                  formularioBloqueado ||
+                  savingVacante
+                }
+                className={`w-full inline-flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-black shadow-md cursor-pointer transition-all ${
+                  editingVacanteId !==
+                  null
+                    ? "bg-sky-600 hover:bg-sky-700"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                <Save size={16} />
 
-                  {noHayAreasActivas
-                    ? "Sin áreas disponibles"
-                    : "Publicar oferta TI"}
+                {savingVacante
+                  ? editingVacanteId !==
+                    null
+                    ? "Guardando cambios..."
+                    : "Publicando oferta..."
+                  : editingVacanteId !==
+                      null
+                    ? "Guardar cambios"
+                    : noHayAreasActivas
+                      ? "Sin áreas disponibles"
+                      : "Publicar oferta TI"}
+              </button>
+
+              {editingVacanteId !==
+                null && (
+                <button
+                  type="button"
+                  onClick={
+                    cancelarEdicionVacante
+                  }
+                  disabled={
+                    savingVacante
+                  }
+                  className="w-full inline-flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-50 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-black cursor-pointer"
+                >
+                  <X size={16} />
+                  Cancelar edición
                 </button>
+              )}
             </form>
           </section>
         </aside>
@@ -1116,11 +1451,13 @@ function AdminVacantes() {
                 placeholder="Título de la evaluación"
                 value={examForm.titulo}
                 onChange={(event) =>
-                  setExamForm((prev) => ({
-                    ...prev,
-                    titulo:
-                      event.target.value,
-                  }))
+                  setExamForm(
+                    (prev) => ({
+                      ...prev,
+                      titulo:
+                        event.target.value,
+                    })
+                  )
                 }
                 className="input-light text-sm"
               />
@@ -1132,11 +1469,13 @@ function AdminVacantes() {
                   examForm.descripcion
                 }
                 onChange={(event) =>
-                  setExamForm((prev) => ({
-                    ...prev,
-                    descripcion:
-                      event.target.value,
-                  }))
+                  setExamForm(
+                    (prev) => ({
+                      ...prev,
+                      descripcion:
+                        event.target.value,
+                    })
+                  )
                 }
                 className="input-light text-sm"
               />
@@ -1157,12 +1496,13 @@ function AdminVacantes() {
                       (prev) => ({
                         ...prev,
                         tipoPregunta:
-                          event.target
-                            .value,
+                          event.target.value,
+
                         opcionA: "",
                         opcionB: "",
                         opcionC: "",
                         opcionD: "",
+
                         respuestaCorrecta:
                           "A",
                       })
@@ -1212,8 +1552,7 @@ function AdminVacantes() {
                         (prev) => ({
                           ...prev,
                           opcionA:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -1231,8 +1570,7 @@ function AdminVacantes() {
                         (prev) => ({
                           ...prev,
                           opcionB:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -1250,8 +1588,7 @@ function AdminVacantes() {
                         (prev) => ({
                           ...prev,
                           opcionC:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -1269,8 +1606,7 @@ function AdminVacantes() {
                         (prev) => ({
                           ...prev,
                           opcionD:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -1304,8 +1640,7 @@ function AdminVacantes() {
                         (prev) => ({
                           ...prev,
                           respuestaCorrecta:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -1356,7 +1691,10 @@ function AdminVacantes() {
 
               <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
                 {examForm.preguntas.map(
-                  (pregunta, index) => (
+                  (
+                    pregunta,
+                    index
+                  ) => (
                     <div
                       key={index}
                       className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs flex justify-between items-center"
@@ -1381,6 +1719,7 @@ function AdminVacantes() {
                           setExamForm(
                             (prev) => ({
                               ...prev,
+
                               preguntas:
                                 prev.preguntas.filter(
                                   (
@@ -1408,12 +1747,12 @@ function AdminVacantes() {
                 type="button"
                 onClick={() => {
                   setShowExamModal(false);
+
                   setExamForm(
                     initialExamForm
                   );
-                  setSelectedVacante(
-                    null
-                  );
+
+                  setSelectedVacante(null);
                 }}
                 className="border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
               >
@@ -1422,7 +1761,9 @@ function AdminVacantes() {
 
               <button
                 type="button"
-                onClick={handleSaveExam}
+                onClick={
+                  handleSaveExam
+                }
                 className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-md cursor-pointer transition-colors"
               >
                 Guardar examen oficial
